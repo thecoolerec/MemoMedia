@@ -2,6 +2,7 @@ package com.example
 
 import android.app.Application
 import com.example.data.local.AppDatabase
+import com.example.data.repository.AppSettingsRepository
 import com.example.data.repository.CategoryRepository
 import com.example.data.repository.CaptureSessionRepository
 import com.example.data.repository.MediaRepository
@@ -41,6 +42,8 @@ class LocalMediaApplication : Application() {
         private set
     lateinit var sourceRuleRepository: SourceRuleRepository
         private set
+    lateinit var appSettingsRepository: AppSettingsRepository
+        private set
 
     // Media layer
     lateinit var mediaStoreDataSource: MediaStoreDataSource
@@ -72,6 +75,7 @@ class LocalMediaApplication : Application() {
         tagRepository = TagRepository(database)
         captureSessionRepository = CaptureSessionRepository(database)
         sourceRuleRepository = SourceRuleRepository(database)
+        appSettingsRepository = AppSettingsRepository(this)
 
         // Init media source
         mediaStoreDataSource = MediaStoreDataSource(this)
@@ -85,12 +89,14 @@ class LocalMediaApplication : Application() {
         captureSessionAggregator = CaptureSessionAggregator(
             captureSessionRepository,
             mediaRepository,
+            appSettingsRepository,
             appScope
         )
         mediaReconciler = MediaReconciler(
             mediaStoreDataSource,
             mediaRepository,
             categoryRepository,
+            sourceRuleRepository,
             ruleEngine,
             policyEngine,
             captureSessionAggregator
@@ -110,9 +116,10 @@ class LocalMediaApplication : Application() {
             mediaReconciler.reconcile(forceFullScan = false)
             retentionScanner.scanAndMarkExpired()
 
-            // Periodic retention check loop (runs every 6 hours while app active)
+            // Periodic retention check loop (interval from settings)
             while (isActive) {
-                delay(6 * 3600 * 1000L)
+                val intervalHours = appSettingsRepository.getSnapshot().retentionScanIntervalHours
+                delay(intervalHours * 3600 * 1000L)
                 retentionScanner.scanAndMarkExpired()
             }
         }

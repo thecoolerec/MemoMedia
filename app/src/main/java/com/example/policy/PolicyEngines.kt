@@ -15,6 +15,11 @@ data class SourceRuleResult(
 
 interface SourceRuleEngine {
     suspend fun evaluate(asset: MediaAsset): SourceRuleResult
+    fun evaluateWithSnapshot(
+        asset: MediaAsset,
+        activeRules: List<SourceRule>,
+        categories: Map<Long, Category>
+    ): SourceRuleResult
 }
 
 class DefaultSourceRuleEngine(
@@ -23,7 +28,23 @@ class DefaultSourceRuleEngine(
 
     override suspend fun evaluate(asset: MediaAsset): SourceRuleResult {
         val rules = ruleRepository.getActiveRules()
+        return evaluateWithRules(asset, rules, null)
+    }
 
+    override fun evaluateWithSnapshot(
+        asset: MediaAsset,
+        activeRules: List<SourceRule>,
+        categories: Map<Long, Category>
+    ): SourceRuleResult {
+        val screenshotCatId = categories.values.find { it.name == "截图" }?.id
+        return evaluateWithRules(asset, activeRules, screenshotCatId)
+    }
+
+    private fun evaluateWithRules(
+        asset: MediaAsset,
+        rules: List<SourceRule>,
+        screenshotCategoryId: Long?
+    ): SourceRuleResult {
         for (rule in rules) {
             if (matches(rule, asset)) {
                 return SourceRuleResult(
@@ -36,12 +57,12 @@ class DefaultSourceRuleEngine(
         }
 
         // Default fallback if no custom rule matched:
-        // If relativePath or bucket contains Screenshot/截图, default to category 4 if not matched by custom rule
+        // If relativePath or bucket or displayName contains Screenshot/截图, default to Screenshot category
         val path = (asset.relativePath ?: "") + (asset.bucketName ?: "") + (asset.displayName ?: "")
         if (path.contains("Screenshot", ignoreCase = true) || path.contains("截图")) {
             return SourceRuleResult(
                 matchedRule = null,
-                categoryId = 4L, // Default Screenshot category id
+                categoryId = screenshotCategoryId ?: 4L,
                 notificationMode = NotificationMode.SILENT,
                 autoClassify = true
             )

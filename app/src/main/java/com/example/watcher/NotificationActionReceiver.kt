@@ -28,20 +28,31 @@ class NotificationActionReceiver : BroadcastReceiver() {
             if (sessionId != -1L && categoryId != -1L) {
                 val app = context.applicationContext as? LocalMediaApplication
                 if (app != null) {
+                    val pendingResult = goAsync()
                     CoroutineScope(Dispatchers.IO).launch {
-                        val category = app.categoryRepository.getById(categoryId)
-                        val expireAt = category?.let {
-                            app.policyEngine.calculateExpireAt(System.currentTimeMillis(), it)
-                        }
+                        try {
+                            val category = app.categoryRepository.getById(categoryId)
+                            val items = app.mediaRepository.getBySession(sessionId)
+                            if (items.isNotEmpty()) {
+                                // Calculate expireAt based on asset capturedAt, not current time
+                                for (item in items) {
+                                    val expireAt = category?.let {
+                                        app.policyEngine.calculateExpireAt(item.capturedAt ?: item.addedAt, it)
+                                    }
+                                    app.mediaRepository.assignCategory(item.id, categoryId, expireAt)
+                                }
+                            }
+                            
+                            app.captureSessionRepository.updateStatus(sessionId, SessionStatus.CLASSIFIED.name)
 
-                        app.mediaRepository.assignSessionCategory(sessionId, categoryId, expireAt)
-                        app.captureSessionRepository.updateStatus(sessionId, SessionStatus.CLASSIFIED.name)
+                            // Cancel alert notification
+                            app.notificationManager.cancelAlertNotification()
 
-                        // Cancel alert notification
-                        app.notificationManager.cancelAlertNotification()
-
-                        CoroutineScope(Dispatchers.Main).launch {
-                            Toast.makeText(context, "已归类到「$categoryName」", Toast.LENGTH_SHORT).show()
+                            CoroutineScope(Dispatchers.Main).launch {
+                                Toast.makeText(context, "已归类到「$categoryName」", Toast.LENGTH_SHORT).show()
+                            }
+                        } finally {
+                            pendingResult.finish()
                         }
                     }
                 }

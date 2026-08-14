@@ -145,8 +145,13 @@ class QuickClassifyOverlay(private val context: Context) {
     private fun classifySession(sessionId: Long, category: Category) {
         val app = context.applicationContext as? LocalMediaApplication ?: return
         CoroutineScope(Dispatchers.IO).launch {
-            val expireAt = app.policyEngine.calculateExpireAt(System.currentTimeMillis(), category)
-            app.mediaRepository.assignSessionCategory(sessionId, category.id, expireAt)
+            val items = app.mediaRepository.getBySession(sessionId)
+            if (items.isNotEmpty()) {
+                for (item in items) {
+                    val expireAt = app.policyEngine.calculateExpireAt(item.capturedAt ?: item.addedAt, category)
+                    app.mediaRepository.assignCategory(item.id, category.id, expireAt)
+                }
+            }
             app.captureSessionRepository.updateStatus(sessionId, SessionStatus.CLASSIFIED.name)
             CoroutineScope(Dispatchers.Main).launch {
                 Toast.makeText(context, "已归类至「${category.name}」", Toast.LENGTH_SHORT).show()

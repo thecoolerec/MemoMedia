@@ -6,10 +6,13 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.result.IntentSenderRequest
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.LocalMediaApplication
+import com.example.core.enum.NotificationMode
 import com.example.core.model.MediaAsset
+import com.example.media.MediaDeletionHelper
 import com.example.watcher.MediaJobService
 import com.example.watcher.MediaMonitorService
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,9 +32,10 @@ data class SettingsUiState(
     val isRetentionScanning: Boolean = false,
     val isServiceRunning: Boolean = true,
     val isOverlayPermissionGranted: Boolean = false,
-    val notificationMode: String = "IMMEDIATE",
-    val aggregationWindowSeconds: Int = 10,
-    val showExpiredDialog: Boolean = false
+    val notificationMode: String = "OVERLAY",
+    val aggregationWindowSeconds: Int = 8,
+    val showExpiredDialog: Boolean = false,
+    val pendingDeleteRequest: IntentSenderRequest? = null
 )
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
@@ -39,50 +43,36 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val mediaRepository = app.mediaRepository
     private val retentionScanner = app.retentionScanner
     private val reconciler = app.mediaReconciler
-    private val prefs = application.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+    private val settingsRepository = app.appSettingsRepository
 
     private val _isScanning = MutableStateFlow(false)
     private val _isRetentionScanning = MutableStateFlow(false)
     private val _expiredItems = MutableStateFlow<List<MediaAsset>>(emptyList())
     private val _showExpiredDialog = MutableStateFlow(false)
-    private val _isServiceRunning = MutableStateFlow(true)
-    private val _notificationMode = MutableStateFlow(prefs.getString("notification_mode", "IMMEDIATE") ?: "IMMEDIATE")
-    private val _aggregationWindow = MutableStateFlow(prefs.getInt("aggregation_window", 10))
+    private val _pendingDeleteRequest = MutableStateFlow<IntentSenderRequest?>(null)
 
     private data class ActionState(
         val isScanning: Boolean,
         val isRetention: Boolean,
         val expired: List<MediaAsset>,
-        val showExpired: Boolean
-    )
-
-    private data class ConfigState(
-        val isService: Boolean,
-        val notifMode: String,
-        val aggWin: Int
+        val showExpired: Boolean,
+        val deleteRequest: IntentSenderRequest?
     )
 
     private val actionFlow = combine(
         _isScanning,
         _isRetentionScanning,
         _expiredItems,
-        _showExpiredDialog
-    ) { isScanning, isRetention, expired, showExpired ->
-        ActionState(isScanning, isRetention, expired, showExpired)
-    }
-
-    private val configFlow = combine(
-        _isServiceRunning,
-        _notificationMode,
-        _aggregationWindow
-    ) { isService, notifMode, aggWin ->
-        ConfigState(isService, notifMode, aggWin)
+        _showExpiredDialog,
+        _pendingDeleteRequest
+    ) { isScanning, isRetention, expired, showExpired, deleteReq ->
+        ActionState(isScanning, isRetention, expired, showExpired, deleteReq)
     }
 
     val uiState: StateFlow<SettingsUiState> = combine(
         mediaRepository.observeTimeline(),
         actionFlow,
-        configFlow
+        settingsRepository.settings
     ) { allMedia, actions, config ->
         val total = allMedia.size
         val classified = allMedia.count { it.primaryCategoryId != null }
@@ -101,11 +91,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             expiredMediaItems = actions.expired,
             isScanning = actions.isScanning,
             isRetentionScanning = actions.isRetention,
-            isServiceRunning = config.isService,
+            isServiceRunning = config.isServiceRunning,
             isOverlayPermissionGranted = overlayGranted,
-            notificationMode = config.notifMode,
-            aggregationWindowSeconds = config.aggWin,
-            showExpiredDialog = actions.showExpired
+            notificationMode = config.defaultNotificationMode.name,
+            aggregationWindowSeconds = config.aggregationWindowSeconds,
+            showExpiredDialog = actions.showExpired,
+            pendingDeleteRequest = actions.deleteRequest
         )
     }.stateIn(
         viewModelScope,
@@ -116,7 +107,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun triggerFullScan() {
         viewModelScope.launch {
             _isScanning.value = true
-            reconciler.reconcile()
+            reconciler.reconcile(forceFullScan = true)
             _isScanning.value = false
         }
     }
@@ -135,18 +126,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _showExpiredDialog.value = false
     }
 
-    fun setNotificationMode(mode: String) {
-        _notificationMode.value = mode
-        prefs.edit().putString("notification_mode", mode).apply()
+    fun setNotificationMode(modeStr: String) {
+        val mode = runCatching { NotificationMode.valueOf(modeStr) }.getOrDefault(NotificationMode.OVERLAY)
+        settingsRepository.setNotificationMode(mode)
     }
 
     fun setAggregationWindow(seconds: Int) {
-        _aggregationWindow.value = seconds
-        prefs.edit().putInt("aggregation_window", seconds).apply()
+        settingsRepository.setAggregationWindow(seconds)
     }
 
     fun toggleBackgroundService(enable: Boolean) {
-        _isServiceRunning.value = enable
+        settingsRepository.setServiceRunning(enable)
         val context = getApplication<Application>()
         if (enable) {
             MediaMonitorService.start(context)
@@ -163,12 +153,28 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         )
     }
 
-    fun deleteExpiredMedia(items: List<MediaAsset>) {
+    fun requestDeleteExpiredMedia(items: List<MediaAsset>) {
+        val uris = items.map { it.contentUri }
+        val deleteRequest = MediaDeletionHelper.createDeleteRequestOrDeleteDirectly(getApplication(), uris)
+        if (deleteRequest != null) {
+            _pendingDeleteRequest.value = deleteRequest
+        } else {
+            // Deleted directly on pre-R
+            confirmDeletedInDb(items)
+        }
+    }
+
+    fun confirmDeletedInDb(items: List<MediaAsset> = _expiredItems.value) {
         viewModelScope.launch {
             val ids = items.map { it.id }
             mediaRepository.markDeleted(ids)
             _expiredItems.value = emptyList()
             _showExpiredDialog.value = false
+            _pendingDeleteRequest.value = null
         }
+    }
+
+    fun cancelDeleteRequest() {
+        _pendingDeleteRequest.value = null
     }
 }

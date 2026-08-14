@@ -41,14 +41,14 @@ interface MediaAssetDao {
     @Query("SELECT * FROM media_asset WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): MediaAssetEntity?
 
-    @Query("SELECT * FROM media_asset WHERE media_store_id = :mediaStoreId LIMIT 1")
-    suspend fun getByMediaStoreId(mediaStoreId: Long): MediaAssetEntity?
+    @Query("SELECT * FROM media_asset WHERE content_uri = :contentUri LIMIT 1")
+    suspend fun getByContentUri(contentUri: String): MediaAssetEntity?
 
-    @Query("SELECT EXISTS(SELECT 1 FROM media_asset WHERE media_store_id = :mediaStoreId)")
-    suspend fun exists(mediaStoreId: Long): Boolean
+    @Query("SELECT EXISTS(SELECT 1 FROM media_asset WHERE content_uri = :contentUri)")
+    suspend fun exists(contentUri: String): Boolean
 
-    @Query("SELECT media_store_id FROM media_asset WHERE status != 'DELETED'")
-    suspend fun getAllKnownMediaStoreIds(): List<Long>
+    @Query("SELECT content_uri FROM media_asset WHERE status != 'DELETED'")
+    suspend fun getAllKnownContentUris(): List<String>
 
     @Query("SELECT MAX(added_at) FROM media_asset")
     suspend fun getMaxAddedAt(): Long?
@@ -157,6 +157,9 @@ interface CaptureSessionDao {
     @Query("SELECT * FROM capture_session ORDER BY started_at DESC")
     fun observeAll(): Flow<List<CaptureSessionEntity>>
 
+    @Query("SELECT * FROM capture_session WHERE status = 'READY' AND delivery_status = 'NOT_DELIVERED' ORDER BY started_at DESC")
+    suspend fun getUndeliveredReadySessions(): List<CaptureSessionEntity>
+
     @Query("SELECT * FROM capture_session WHERE status = 'READY' OR status = 'COLLECTING' ORDER BY started_at DESC")
     fun observeActiveSessions(): Flow<List<CaptureSessionEntity>>
 
@@ -166,6 +169,9 @@ interface CaptureSessionDao {
     @Query("SELECT * FROM capture_session WHERE status = 'COLLECTING' ORDER BY started_at DESC LIMIT 1")
     suspend fun getLatestCollectingSession(): CaptureSessionEntity?
 
+    @Query("SELECT * FROM capture_session WHERE status = 'COLLECTING' ORDER BY started_at DESC")
+    suspend fun getAllCollectingSessions(): List<CaptureSessionEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(session: CaptureSessionEntity): Long
 
@@ -174,6 +180,9 @@ interface CaptureSessionDao {
 
     @Query("UPDATE capture_session SET status = :status WHERE id = :id")
     suspend fun updateStatus(id: Long, status: String)
+
+    @Query("UPDATE capture_session SET delivery_status = :deliveryStatus WHERE id = :id")
+    suspend fun updateDeliveryStatus(id: Long, deliveryStatus: String)
 
     @Query("UPDATE capture_session SET media_count = media_count + 1, ended_at = :endedAt WHERE id = :id")
     suspend fun incrementMediaCount(id: Long, endedAt: Long)

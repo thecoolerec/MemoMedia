@@ -4,6 +4,7 @@ import com.example.core.enum.MediaType
 import com.example.core.enum.SessionStatus
 import com.example.core.model.CaptureSession
 import com.example.core.model.MediaAsset
+import com.example.data.repository.AppSettingsRepository
 import com.example.data.repository.CaptureSessionRepository
 import com.example.data.repository.MediaRepository
 import kotlinx.coroutines.CoroutineScope
@@ -20,6 +21,7 @@ import kotlinx.coroutines.sync.withLock
 class CaptureSessionAggregator(
     private val sessionRepository: CaptureSessionRepository,
     private val mediaRepository: MediaRepository,
+    private val settingsRepository: AppSettingsRepository,
     private val scope: CoroutineScope
 ) {
     private val mutex = Mutex()
@@ -30,15 +32,34 @@ class CaptureSessionAggregator(
     private val _sessionReadyEvents = MutableSharedFlow<CaptureSession>(extraBufferCapacity = 10)
     val sessionReadyEvents: SharedFlow<CaptureSession> = _sessionReadyEvents.asSharedFlow()
 
+    suspend fun recoverStaleSessions() = mutex.withLock {
+        val collectingSessions = sessionRepository.getAllCollectingSessions()
+        val now = System.currentTimeMillis()
+        for (session in collectingSessions) {
+            val quietPeriodMs = settingsRepository.getSnapshot().quietPeriodSeconds * 1000L
+            if (now - session.endedAt > quietPeriodMs) {
+                // Stale, finalize it
+                sessionRepository.updateStatus(session.id, SessionStatus.READY.name)
+            } else {
+                // Still active within quiet window, resume it
+                activeSession = session
+                lastAssetAddedAt = session.endedAt
+                scheduleQuietPeriod()
+            }
+        }
+    }
+
     suspend fun aggregate(asset: MediaAsset): Long = mutex.withLock {
         val now = asset.addedAt
         val current = activeSession
+        val windowMs = settingsRepository.getSnapshot().aggregationWindowSeconds * 1000L
 
+        val gap = now - lastAssetAddedAt
         val shouldJoin = current != null &&
                 current.status == SessionStatus.COLLECTING &&
                 current.sourcePackage == asset.ownerPackage &&
                 current.mediaType == asset.mediaType &&
-                (now - lastAssetAddedAt) <= 8_000L // 8s join window
+                gap in 0..windowMs
 
         val sessionId: Long
         if (shouldJoin && current != null) {
@@ -74,8 +95,9 @@ class CaptureSessionAggregator(
 
     private fun scheduleQuietPeriod() {
         quietPeriodJob?.cancel()
+        val quietPeriodMs = settingsRepository.getSnapshot().quietPeriodSeconds * 1000L
         quietPeriodJob = scope.launch(Dispatchers.Default) {
-            delay(2_000L) // 2s quiet period after last photo
+            delay(quietPeriodMs)
             mutex.withLock {
                 val current = activeSession
                 if (current != null && current.status == SessionStatus.COLLECTING) {

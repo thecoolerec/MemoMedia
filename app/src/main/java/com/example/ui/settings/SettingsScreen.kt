@@ -1,6 +1,8 @@
 package com.example.ui.settings
 
 import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -140,11 +142,28 @@ fun SettingsScreen(
         }
     }
 
+    val deleteLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.confirmDeletedInDb()
+        } else {
+            viewModel.cancelDeleteRequest()
+        }
+    }
+
+    androidx.compose.runtime.LaunchedEffect(state.pendingDeleteRequest) {
+        val request = state.pendingDeleteRequest
+        if (request != null) {
+            deleteLauncher.launch(request)
+        }
+    }
+
     if (state.showExpiredDialog) {
         ExpiredMediaDialog(
             expiredItems = state.expiredMediaItems,
             onDismiss = { viewModel.closeExpiredDialog() },
-            onConfirmDelete = { viewModel.deleteExpiredMedia(state.expiredMediaItems) }
+            onConfirmDelete = { viewModel.requestDeleteExpiredMedia(state.expiredMediaItems) }
         )
     }
 }

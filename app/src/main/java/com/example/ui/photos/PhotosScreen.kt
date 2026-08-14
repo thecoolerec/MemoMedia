@@ -1,5 +1,8 @@
 package com.example.ui.photos
 
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -82,6 +85,23 @@ fun PhotosScreen(
 
     val pendingCount = remember(state.items) {
         state.items.count { it.status == MediaStatus.PENDING }
+    }
+
+    val deleteLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.confirmDeletedInDb()
+        } else {
+            viewModel.cancelDeleteRequest()
+        }
+    }
+
+    androidx.compose.runtime.LaunchedEffect(state.pendingDeleteRequest) {
+        val request = state.pendingDeleteRequest
+        if (request != null) {
+            deleteLauncher.launch(request)
+        }
     }
 
     Scaffold(

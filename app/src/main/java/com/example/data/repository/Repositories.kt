@@ -37,10 +37,10 @@ class MediaRepository(private val db: AppDatabase) {
     fun observeCountByCategory(categoryId: Long): Flow<Int> = dao.observeCountByCategory(categoryId)
 
     suspend fun getById(id: Long): MediaAsset? = dao.getById(id)?.toDomain()
-    suspend fun getByMediaStoreId(mediaStoreId: Long): MediaAsset? = dao.getByMediaStoreId(mediaStoreId)?.toDomain()
+    suspend fun getByContentUri(contentUri: String): MediaAsset? = dao.getByContentUri(contentUri)?.toDomain()
     suspend fun getBySession(sessionId: Long): List<MediaAsset> = dao.getBySession(sessionId).map { it.toDomain() }
-    suspend fun exists(mediaStoreId: Long): Boolean = dao.exists(mediaStoreId)
-    suspend fun getAllKnownMediaStoreIds(): List<Long> = dao.getAllKnownMediaStoreIds()
+    suspend fun exists(contentUri: String): Boolean = dao.exists(contentUri)
+    suspend fun getAllKnownContentUris(): List<String> = dao.getAllKnownContentUris()
     suspend fun getMaxAddedAt(): Long = dao.getMaxAddedAt() ?: 0L
 
     suspend fun insert(asset: MediaAsset): Long = dao.insert(asset.toEntity())
@@ -120,9 +120,13 @@ class CaptureSessionRepository(private val db: AppDatabase) {
     suspend fun getById(id: Long): CaptureSession? = dao.getById(id)?.toDomain()
     suspend fun getLatestCollectingSession(): CaptureSession? = dao.getLatestCollectingSession()?.toDomain()
 
+    suspend fun getUndeliveredReadySessions(): List<CaptureSession> = dao.getUndeliveredReadySessions().map { it.toDomain() }
+    suspend fun getAllCollectingSessions(): List<CaptureSession> = dao.getAllCollectingSessions().map { it.toDomain() }
+
     suspend fun save(session: CaptureSession): Long = dao.insert(session.toEntity())
     suspend fun update(session: CaptureSession) = dao.update(session.toEntity())
     suspend fun updateStatus(id: Long, status: String) = dao.updateStatus(id, status)
+    suspend fun updateDeliveryStatus(id: Long, deliveryStatus: String) = dao.updateDeliveryStatus(id, deliveryStatus)
     suspend fun incrementMediaCount(id: Long, endedAt: Long) = dao.incrementMediaCount(id, endedAt)
 }
 

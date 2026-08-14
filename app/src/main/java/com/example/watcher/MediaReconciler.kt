@@ -4,6 +4,7 @@ import com.example.core.enum.MediaStatus
 import com.example.core.model.MediaAsset
 import com.example.data.repository.CategoryRepository
 import com.example.data.repository.MediaRepository
+import com.example.data.repository.SourceRuleRepository
 import com.example.media.MediaStoreDataSource
 import com.example.policy.CategoryPolicyEngine
 import com.example.policy.SourceRuleEngine
@@ -16,6 +17,7 @@ class MediaReconciler(
     private val mediaStoreDataSource: MediaStoreDataSource,
     private val mediaRepository: MediaRepository,
     private val categoryRepository: CategoryRepository,
+    private val sourceRuleRepository: SourceRuleRepository,
     private val ruleEngine: SourceRuleEngine,
     private val policyEngine: CategoryPolicyEngine,
     private val aggregator: CaptureSessionAggregator
@@ -34,9 +36,10 @@ class MediaReconciler(
 
             var newlyImportedCount = 0
             val categoriesMap = categoryRepository.getAll().associateBy { it.id }
+            val activeRules = sourceRuleRepository.getActiveRules()
 
             for (sysMedia in systemMediaList) {
-                if (mediaRepository.exists(sysMedia.mediaStoreId)) {
+                if (mediaRepository.exists(sysMedia.contentUri)) {
                     continue
                 }
 
@@ -60,8 +63,8 @@ class MediaReconciler(
                     updatedAt = now
                 )
 
-                // Evaluate rule
-                val ruleResult = ruleEngine.evaluate(asset)
+                // Evaluate rule with snapshot to avoid N+1 queries
+                val ruleResult = ruleEngine.evaluateWithSnapshot(asset, activeRules, categoriesMap)
 
                 if (ruleResult.autoClassify && ruleResult.categoryId != null) {
                     val targetCategory = categoriesMap[ruleResult.categoryId]
@@ -78,27 +81,32 @@ class MediaReconciler(
                     }
                     mediaRepository.insert(asset)
                 } else {
-                    // Aggregate into capture session
-                    val sessionId = aggregator.aggregate(asset)
-                    asset = asset.copy(
-                        captureSessionId = sessionId,
-                        status = MediaStatus.PENDING
-                    )
-                    mediaRepository.insert(asset)
+                    if (forceFullScan) {
+                        // Historical scan: do not aggregate into active CaptureSession
+                        mediaRepository.insert(asset)
+                    } else {
+                        // Live import: Aggregate into capture session
+                        val sessionId = aggregator.aggregate(asset)
+                        asset = asset.copy(
+                            captureSessionId = sessionId,
+                            status = MediaStatus.PENDING
+                        )
+                        mediaRepository.insert(asset)
+                    }
                 }
                 newlyImportedCount++
             }
 
             // If full scan requested, check for missing/deleted files
             if (forceFullScan) {
-                val knownIds = mediaRepository.getAllKnownMediaStoreIds()
-                val currentSystemIds = systemMediaList.map { it.mediaStoreId }.toSet()
-                val missingIds = knownIds.filter { !currentSystemIds.contains(it) }
-                if (missingIds.isNotEmpty()) {
+                val knownUris = mediaRepository.getAllKnownContentUris()
+                val currentSystemUris = systemMediaList.map { it.contentUri }.toSet()
+                val missingUris = knownUris.filter { !currentSystemUris.contains(it) }
+                if (missingUris.isNotEmpty()) {
                     // Check individual existence before marking deleted
                     val reallyDeletedIds = mutableListOf<Long>()
-                    for (id in missingIds) {
-                        val asset = mediaRepository.getByMediaStoreId(id)
+                    for (uri in missingUris) {
+                        val asset = mediaRepository.getByContentUri(uri)
                         if (asset != null && !mediaStoreDataSource.exists(android.net.Uri.parse(asset.contentUri))) {
                             reallyDeletedIds.add(asset.id)
                         }

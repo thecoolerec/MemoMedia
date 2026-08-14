@@ -14,14 +14,8 @@ class BootReceiver : BroadcastReceiver() {
             // Schedule JobService
             MediaJobService.schedule(context)
 
-            // Reconcile missed media during reboot
-            val app = context.applicationContext as? LocalMediaApplication
-            if (app != null) {
-                CoroutineScope(Dispatchers.IO).launch {
-                    app.mediaReconciler.reconcile(forceFullScan = true)
-                    app.retentionScanner.scanAndMarkExpired()
-                }
-            }
+            // Reconcile missed media during reboot safely via JobScheduler
+            BootReconcileJobService.schedule(context)
         }
     }
 }

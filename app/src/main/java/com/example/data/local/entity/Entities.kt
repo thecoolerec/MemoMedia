@@ -8,7 +8,7 @@ import androidx.room.PrimaryKey
 @Entity(
     tableName = "media_asset",
     indices = [
-        Index(value = ["media_store_id"], unique = true),
+        Index(value = ["content_uri"], unique = true),
         Index(value = ["captured_at"]),
         Index(value = ["added_at"]),
         Index(value = ["primary_category_id"]),
@@ -163,7 +163,10 @@ data class CaptureSessionEntity(
     @ColumnInfo(name = "media_count")
     val mediaCount: Int,
 
-    val status: String
+    val status: String,
+
+    @ColumnInfo(name = "delivery_status")
+    val deliveryStatus: String = "NOT_DELIVERED"
 )
 
 @Entity(

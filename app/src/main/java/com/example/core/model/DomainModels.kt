@@ -49,6 +49,12 @@ data class Tag(
     val name: String
 )
 
+enum class DeliveryStatus {
+    NOT_DELIVERED,
+    OVERLAY_DELIVERED,
+    NOTIFICATION_DELIVERED
+}
+
 data class CaptureSession(
     val id: Long = 0,
     val sourcePackage: String? = null,
@@ -56,7 +62,8 @@ data class CaptureSession(
     val startedAt: Long,
     val endedAt: Long,
     val mediaCount: Int,
-    val status: SessionStatus = SessionStatus.COLLECTING
+    val status: SessionStatus = SessionStatus.COLLECTING,
+    val deliveryStatus: DeliveryStatus = DeliveryStatus.NOT_DELIVERED
 )
 
 data class SourceRule(

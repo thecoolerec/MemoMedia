@@ -102,7 +102,8 @@ fun CaptureSessionEntity.toDomain(): CaptureSession = CaptureSession(
     startedAt = startedAt,
     endedAt = endedAt,
     mediaCount = mediaCount,
-    status = runCatching { SessionStatus.valueOf(status) }.getOrDefault(SessionStatus.COLLECTING)
+    status = runCatching { SessionStatus.valueOf(status) }.getOrDefault(SessionStatus.COLLECTING),
+    deliveryStatus = runCatching { com.example.core.model.DeliveryStatus.valueOf(deliveryStatus) }.getOrDefault(com.example.core.model.DeliveryStatus.NOT_DELIVERED)
 )
 
 fun CaptureSession.toEntity(): CaptureSessionEntity = CaptureSessionEntity(
@@ -112,7 +113,8 @@ fun CaptureSession.toEntity(): CaptureSessionEntity = CaptureSessionEntity(
     startedAt = startedAt,
     endedAt = endedAt,
     mediaCount = mediaCount,
-    status = status.name
+    status = status.name,
+    deliveryStatus = deliveryStatus.name
 )
 
 fun SourceRuleEntity.toDomain(): SourceRule = SourceRule(

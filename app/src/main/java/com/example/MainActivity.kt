@@ -10,10 +10,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,7 +26,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -68,6 +73,33 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+sealed interface MediaAccessState {
+    object Full : MediaAccessState
+    object Partial : MediaAccessState
+    object None : MediaAccessState
+}
+
+fun checkMediaAccessState(context: android.content.Context): MediaAccessState {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        val hasImages = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+        val hasVideo = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
+        val hasSelected = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED
+        
+        if (hasImages && hasVideo) return MediaAccessState.Full
+        if (hasSelected) return MediaAccessState.Partial
+        return MediaAccessState.None
+    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val hasImages = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+        val hasVideo = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
+        if (hasImages && hasVideo) return MediaAccessState.Full
+        return MediaAccessState.None
+    } else {
+        val hasStorage = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+        if (hasStorage) return MediaAccessState.Full
+        return MediaAccessState.None
+    }
+}
+
 @Composable
 fun MainAppScreen() {
     val context = LocalContext.current
@@ -75,7 +107,12 @@ fun MainAppScreen() {
 
     val permissionsToRequest = remember {
         val list = mutableListOf<String>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            list.add(Manifest.permission.READ_MEDIA_IMAGES)
+            list.add(Manifest.permission.READ_MEDIA_VIDEO)
+            list.add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+            list.add(Manifest.permission.POST_NOTIFICATIONS)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             list.add(Manifest.permission.READ_MEDIA_IMAGES)
             list.add(Manifest.permission.READ_MEDIA_VIDEO)
             list.add(Manifest.permission.POST_NOTIFICATIONS)
@@ -85,38 +122,23 @@ fun MainAppScreen() {
         list.toTypedArray()
     }
 
-    var hasStoragePermission by remember {
-        val granted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.READ_MEDIA_IMAGES
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.READ_EXTERNAL_STORAGE
-            ) == PackageManager.PERMISSION_GRANTED
-        }
-        mutableStateOf(granted)
+    var accessState by remember {
+        mutableStateOf(checkMediaAccessState(context))
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
-        val storageGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            results[Manifest.permission.READ_MEDIA_IMAGES] == true
-        } else {
-            results[Manifest.permission.READ_EXTERNAL_STORAGE] == true
-        }
-        hasStoragePermission = storageGranted
-        if (storageGranted) {
+    ) { _ ->
+        val newState = checkMediaAccessState(context)
+        accessState = newState
+        if (newState != MediaAccessState.None) {
             MediaMonitorService.start(context)
             MediaJobService.schedule(context)
         }
     }
 
     LaunchedEffect(Unit) {
-        if (!hasStoragePermission) {
+        if (accessState == MediaAccessState.None) {
             permissionLauncher.launch(permissionsToRequest)
         } else {
             MediaMonitorService.start(context)
@@ -124,7 +146,7 @@ fun MainAppScreen() {
         }
     }
 
-    if (!hasStoragePermission) {
+    if (accessState == MediaAccessState.None) {
         PermissionRequiredScreen(
             onRequestPermissions = { permissionLauncher.launch(permissionsToRequest) }
         )
@@ -147,29 +169,62 @@ fun MainAppScreen() {
         },
         modifier = Modifier.fillMaxSize()
     ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = Destination.Photos.route,
-            modifier = Modifier.padding(innerPadding)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
         ) {
-            composable(Destination.Photos.route) {
-                val viewModel: PhotosViewModel = viewModel()
-                PhotosScreen(viewModel = viewModel)
+            if (accessState == MediaAccessState.Partial) {
+                Surface(
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "当前为部分照片授权，仅能管理选中的媒体",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(
+                            onClick = { permissionLauncher.launch(permissionsToRequest) }
+                        ) {
+                            Text("授予全部")
+                        }
+                    }
+                }
             }
 
-            composable(Destination.Inbox.route) {
-                val viewModel: InboxViewModel = viewModel()
-                InboxScreen(viewModel = viewModel)
-            }
+            NavHost(
+                navController = navController,
+                startDestination = Destination.Photos.route,
+                modifier = Modifier.weight(1f)
+            ) {
+                composable(Destination.Photos.route) {
+                    val viewModel: PhotosViewModel = viewModel()
+                    PhotosScreen(viewModel = viewModel)
+                }
 
-            composable(Destination.Categories.route) {
-                val viewModel: CategoriesViewModel = viewModel()
-                CategoriesScreen(viewModel = viewModel)
-            }
+                composable(Destination.Inbox.route) {
+                    val viewModel: InboxViewModel = viewModel()
+                    InboxScreen(viewModel = viewModel)
+                }
 
-            composable(Destination.Settings.route) {
-                val viewModel: SettingsViewModel = viewModel()
-                SettingsScreen(viewModel = viewModel)
+                composable(Destination.Categories.route) {
+                    val viewModel: CategoriesViewModel = viewModel()
+                    CategoriesScreen(viewModel = viewModel)
+                }
+
+                composable(Destination.Settings.route) {
+                    val viewModel: SettingsViewModel = viewModel()
+                    SettingsScreen(viewModel = viewModel)
+                }
             }
         }
     }

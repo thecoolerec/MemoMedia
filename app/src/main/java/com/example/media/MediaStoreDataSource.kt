@@ -22,14 +22,14 @@ class MediaStoreDataSource(private val context: Context) {
         val result = mutableListOf<SystemMedia>()
         result.addAll(queryImages(since = 0L))
         result.addAll(queryVideos(since = 0L))
-        result.sortedByDescending { it.dateTaken ?: it.dateAdded }
+        result.sortedBy { it.dateAdded }
     }
 
     suspend fun queryLatest(sinceAddedAt: Long): List<SystemMedia> = withContext(Dispatchers.IO) {
         val result = mutableListOf<SystemMedia>()
         result.addAll(queryImages(since = sinceAddedAt))
         result.addAll(queryVideos(since = sinceAddedAt))
-        result.sortedByDescending { it.dateTaken ?: it.dateAdded }
+        result.sortedBy { it.dateAdded }
     }
 
     suspend fun queryByUri(uri: Uri): SystemMedia? = withContext(Dispatchers.IO) {
@@ -80,7 +80,7 @@ class MediaStoreDataSource(private val context: Context) {
         val projection = getProjection()
         val selection = if (since > 0) "${MediaStore.Images.Media.DATE_ADDED} > ?" else null
         val selectionArgs = if (since > 0) arrayOf(since.toString()) else null
-        val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
+        val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} ASC"
 
         contentResolver.query(
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
@@ -103,7 +103,7 @@ class MediaStoreDataSource(private val context: Context) {
         val projection = getProjection()
         val selection = if (since > 0) "${MediaStore.Video.Media.DATE_ADDED} > ?" else null
         val selectionArgs = if (since > 0) arrayOf(since.toString()) else null
-        val sortOrder = "${MediaStore.Video.Media.DATE_ADDED} DESC"
+        val sortOrder = "${MediaStore.Video.Media.DATE_ADDED} ASC"
 
         contentResolver.query(
             MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
