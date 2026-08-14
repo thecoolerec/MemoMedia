@@ -1,0 +1,41 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:pivotX="54"
+        android:pivotY="54">
+        <!-- Back tilted photo card -->
+        <path
+            android:fillColor="#4DD0E1"
+            android:pathData="M32,30 L74,30 A6,6 0 0,1 80,36 L80,72 A6,6 0 0,1 74,78 L32,78 A6,6 0 0,1 26,72 L26,36 A6,6 0 0,1 32,30 Z"
+            android:alpha="0.4"
+            android:rotation="-8"
+            android:pivotX="54"
+            android:pivotY="54" />
+        <!-- Front photo card -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M34,32 L74,32 A6,6 0 0,1 80,38 L80,76 A6,6 0 0,1 74,82 L34,82 A6,6 0 0,1 28,76 L28,38 A6,6 0 0,1 34,32 Z" />
+        <!-- Photo picture interior -->
+        <path
+            android:fillColor="#3949AB"
+            android:pathData="M32,36 L76,36 A2,2 0 0,1 78,38 L78,66 A2,2 0 0,1 76,68 L32,68 A2,2 0 0,1 30,66 L30,38 A2,2 0 0,1 32,36 Z" />
+        <!-- Sun/Circle in photo -->
+        <path
+            android:fillColor="#FFD54F"
+            android:pathData="M40,46m-4,0a4,4 0 1,0 8,0a4,4 0 1,0 -8,0" />
+        <!-- Mountain/landscape in photo -->
+        <path
+            android:fillColor="#00E676"
+            android:pathData="M30,64 L44,52 L54,61 L62,54 L78,68 L30,68 Z" />
+        <!-- Category sorting badge / sparkles at bottom right -->
+        <path
+            android:fillColor="#FF7043"
+            android:pathData="M66,66 L86,66 A4,4 0 0,1 90,70 L90,82 A4,4 0 0,1 86,86 L66,86 A4,4 0 0,1 62,82 L62,70 A4,4 0 0,1 66,66 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M69,76 L74,76 L74,71 L78,71 L78,76 L83,76 L83,80 L78,80 L78,85 L74,85 L74,80 L69,80 Z" />
+    </group>
+</vector>
