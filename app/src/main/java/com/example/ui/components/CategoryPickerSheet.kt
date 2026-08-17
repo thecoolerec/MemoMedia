@@ -2,18 +2,18 @@ package com.example.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -36,14 +36,13 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.core.model.Category
+import com.example.ui.theme.CategoryDefaultColor
 import com.example.ui.theme.CategoryLifeColor
 import com.example.ui.theme.CategoryScreenshotColor
 import com.example.ui.theme.CategoryTempColor
@@ -91,37 +90,35 @@ fun CategoryPickerSheet(
             Spacer(modifier = Modifier.height(16.dp))
 
             LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth()
             ) {
-                items(categories, key = { it.id }) { category ->
+                itemsIndexed(categories, key = { _, category -> category.id }) { index, category ->
                     val isSelected = category.id == selectedCategoryId
 
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
+                            .heightIn(min = 64.dp)
                             .clickable {
                                 onSelectCategory(category)
                                 onDismiss()
                             }
                             .testTag("category_option_${category.id}"),
                         color = if (isSelected)
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
                         else
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                        shape = RoundedCornerShape(16.dp)
+                            Color.Transparent
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(14.dp),
+                                .padding(horizontal = 8.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(42.dp)
-                                    .background(getCategoryColor(category.name).copy(alpha = 0.15f), CircleShape),
+                                    .size(40.dp)
+                                    .background(getCategoryColor(category.name).copy(alpha = 0.12f), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
@@ -138,11 +135,11 @@ fun CategoryPickerSheet(
                                 Text(
                                     text = category.name,
                                     style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
+                                    fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = if (category.retentionDays == null) "留存：永久保存" else "留存：${category.retentionDays} 天到期",
+                                    text = if (category.retentionDays == null) "永久保存" else "保留 ${category.retentionDays} 天",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -156,6 +153,12 @@ fun CategoryPickerSheet(
                                 )
                             }
                         }
+                    }
+                    if (index < categories.lastIndex) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 62.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+                        )
                     }
                 }
             }
@@ -191,7 +194,7 @@ fun getCategoryColor(name: String): Color {
         "工作" -> CategoryWorkColor
         "临时" -> CategoryTempColor
         "截图" -> CategoryScreenshotColor
-        else -> Color(0xFF0284C7)
+        else -> CategoryDefaultColor
     }
 }
 

@@ -3,7 +3,6 @@ package com.example.ui.settings
 import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,16 +19,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoDelete
-import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -37,23 +37,23 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.core.model.MediaAsset
@@ -72,12 +72,7 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text(
-                        text = "设置与系统策略",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                },
+                title = { Text("设置", style = MaterialTheme.typography.headlineSmall) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
                 )
@@ -89,55 +84,125 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            contentPadding = PaddingValues(bottom = 24.dp)
         ) {
-            // Storage and classification progress
             item {
-                StorageStatsCard(
+                StorageSummaryCard(
                     state = state,
-                    onManualScan = { viewModel.triggerFullScan() }
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
 
-            // Retention & Lifecycle Management
+            item { SettingsSectionHeader("媒体管理") }
             item {
-                RetentionPolicyCard(
-                    state = state,
-                    onScanRetention = { viewModel.triggerRetentionScan() }
+                SettingsRow(
+                    icon = Icons.Default.Refresh,
+                    title = "媒体库同步",
+                    subtitle = if (state.isScanning) "正在重新读取设备媒体" else "重新扫描照片和视频",
+                    value = if (state.isScanning) null else "立即同步",
+                    onClick = if (state.isScanning) null else viewModel::triggerFullScan,
+                    modifier = Modifier.testTag("rescan_mediastore_button"),
+                    trailingContent = if (state.isScanning) {
+                        { CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp) }
+                    } else null
+                )
+                SettingsDivider()
+                SettingsRow(
+                    icon = Icons.Default.Storage,
+                    title = "存储占用",
+                    subtitle = "${state.totalMediaCount} 项媒体",
+                    value = formatSize(state.totalSizeBytes)
+                )
+                SettingsDivider()
+                SettingsRow(
+                    icon = Icons.Default.AutoDelete,
+                    title = "过期媒体",
+                    subtitle = "按分类保留策略检查",
+                    value = when {
+                        state.isRetentionScanning -> "扫描中"
+                        state.expiredMediaItems.isNotEmpty() -> "${state.expiredMediaItems.size} 项"
+                        else -> "检查"
+                    },
+                    onClick = if (state.isRetentionScanning) null else viewModel::triggerRetentionScan,
+                    modifier = Modifier.testTag("scan_expired_media_button")
                 )
             }
 
-            // Real-time Capture Monitor & Overlay
+            item { SettingsSectionHeader("自动整理") }
             item {
-                BackgroundMonitorCard(
-                    state = state,
-                    onToggleService = { viewModel.toggleBackgroundService(it) },
-                    onRequestOverlay = {
-                        val intent = viewModel.getOverlayPermissionIntent()
-                        if (context is Activity) {
-                            context.startActivity(intent)
+                SettingsRow(
+                    icon = Icons.Default.Layers,
+                    title = "后台监听",
+                    subtitle = "发现新媒体后自动加入待整理",
+                    trailingContent = {
+                        Switch(
+                            checked = state.isServiceRunning,
+                            onCheckedChange = viewModel::toggleBackgroundService
+                        )
+                    }
+                )
+                SettingsDivider()
+                SettingsRow(
+                    icon = Icons.Default.PictureInPictureAlt,
+                    title = "快速分类悬浮窗",
+                    subtitle = if (state.isOverlayPermissionGranted) {
+                        "可在其他应用上方快速分类"
+                    } else {
+                        "需要系统悬浮窗权限"
+                    },
+                    value = if (state.isOverlayPermissionGranted) "已允许" else "去授权",
+                    onClick = if (state.isOverlayPermissionGranted) null else {
+                        {
+                            if (context is Activity) {
+                                context.startActivity(viewModel.getOverlayPermissionIntent())
+                            }
                         }
                     }
                 )
-            }
-
-            // Notification and Aggregation Config
-            item {
-                NotificationStrategyCard(
-                    state = state,
-                    onSelectMode = { viewModel.setNotificationMode(it) },
-                    onSelectWindow = { viewModel.setAggregationWindow(it) }
+                SettingsDivider()
+                SettingsChoiceGroup(
+                    icon = Icons.Default.Timer,
+                    title = "图片聚合间隔",
+                    subtitle = "连续产生的媒体会合并为一组",
+                    options = listOf(5 to "5 秒", 8 to "8 秒", 15 to "15 秒", 30 to "30 秒"),
+                    selectedValue = state.aggregationWindowSeconds,
+                    onSelect = viewModel::setAggregationWindow
                 )
             }
 
-            // Privacy & Architecture Card
+            item { SettingsSectionHeader("通知") }
             item {
-                PrivacyGuaranteeCard()
+                SettingsChoiceGroup(
+                    icon = Icons.Default.Notifications,
+                    title = "新媒体提醒",
+                    subtitle = "选择发现新照片后的提醒方式",
+                    options = listOf(
+                        "OVERLAY" to "悬浮窗",
+                        "NOTIFICATION" to "系统通知",
+                        "HEADS_UP" to "强提醒",
+                        "SILENT" to "静默"
+                    ),
+                    selectedValue = state.notificationMode,
+                    onSelect = viewModel::setNotificationMode
+                )
             }
 
+            item { SettingsSectionHeader("权限与隐私") }
             item {
-                Spacer(modifier = Modifier.height(72.dp))
+                SettingsRow(
+                    icon = Icons.Default.Security,
+                    title = "本地处理说明",
+                    subtitle = "照片、分类与规则均保存在设备本地"
+                )
+            }
+
+            item { SettingsSectionHeader("其他") }
+            item {
+                SettingsRow(
+                    icon = Icons.Default.Info,
+                    title = "关于 MemoMedia",
+                    value = "1.0"
+                )
             }
         }
     }
@@ -152,409 +217,114 @@ fun SettingsScreen(
         }
     }
 
-    androidx.compose.runtime.LaunchedEffect(state.pendingDeleteRequest) {
-        val request = state.pendingDeleteRequest
-        if (request != null) {
-            deleteLauncher.launch(request)
-        }
+    LaunchedEffect(state.pendingDeleteRequest) {
+        state.pendingDeleteRequest?.let { deleteLauncher.launch(it) }
     }
 
     if (state.showExpiredDialog) {
         ExpiredMediaDialog(
             expiredItems = state.expiredMediaItems,
-            onDismiss = { viewModel.closeExpiredDialog() },
+            onDismiss = viewModel::closeExpiredDialog,
             onConfirmDelete = { viewModel.requestDeleteExpiredMedia(state.expiredMediaItems) }
         )
     }
 }
 
 @Composable
-private fun StorageStatsCard(
-    state: SettingsUiState,
-    onManualScan: () -> Unit
-) {
+private fun StorageSummaryCard(state: SettingsUiState, modifier: Modifier = Modifier) {
+    val progress = if (state.totalMediaCount > 0) {
+        state.classifiedCount.toFloat() / state.totalMediaCount.toFloat()
+    } else 0f
+
     Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.Storage,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "媒体库概览",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                }
-
-                if (state.isScanning) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                } else {
-                    OutlinedButton(
-                        onClick = onManualScan,
-                        modifier = Modifier.testTag("rescan_mediastore_button")
-                    ) {
-                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("全盘重扫")
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            val progress = if (state.totalMediaCount > 0) {
-                state.classifiedCount.toFloat() / state.totalMediaCount.toFloat()
-            } else 0f
-
-            LinearProgressIndicator(
-                progress = { progress },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "已分类: ${state.classifiedCount} / ${state.totalMediaCount} (${(progress * 100).toInt()}%)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "占用: ${formatSize(state.totalSizeBytes)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun RetentionPolicyCard(
-    state: SettingsUiState,
-    onScanRetention: () -> Unit
-) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.tertiaryContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.AutoDelete,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text = "生命周期与过期清理",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = "根据分类保留天数策略，安全回收临时/截图",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = onScanRetention,
-                enabled = !state.isRetentionScanning,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("scan_expired_media_button")
-            ) {
-                if (state.isRetentionScanning) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = MaterialTheme.colorScheme.onPrimary)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("正在扫描过期项目...")
-                } else {
-                    Icon(Icons.Default.CleaningServices, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("立即执行过期扫描")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BackgroundMonitorCard(
-    state: SettingsUiState,
-    onToggleService: (Boolean) -> Unit,
-    onRequestOverlay: () -> Unit
-) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.secondaryContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Layers,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "实时感知与悬浮速记",
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "后台实时监听服务",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        text = "MediaStore 内容变动时自动唤醒聚合",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = state.isServiceRunning,
-                    onCheckedChange = onToggleService
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "全局悬浮速记气泡",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        text = if (state.isOverlayPermissionGranted) "悬浮窗权限已授权" else "点击申请「显示在其他应用上层」权限",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (state.isOverlayPermissionGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                    )
-                }
-                if (!state.isOverlayPermissionGranted) {
-                    Button(
-                        onClick = onRequestOverlay,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Text("去授权")
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun NotificationStrategyCard(
-    state: SettingsUiState,
-    onSelectMode: (String) -> Unit,
-    onSelectWindow: (Int) -> Unit
-) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Notifications,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "连拍聚合与通知策略",
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-
-            Text(
-                text = "连续拍摄聚合窗口 (防止连拍轰炸)",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                listOf(5, 10, 15, 30).forEach { seconds ->
-                    val selected = state.aggregationWindowSeconds == seconds
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
-                            .clickable { onSelectWindow(seconds) }
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "${seconds}秒",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = "通知提醒方式",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                listOf("IMMEDIATE" to "立即提醒", "HOURLY_BATCH" to "整点汇总", "OFF" to "静默仅收件箱").forEach { (mode, label) ->
-                    val selected = state.notificationMode == mode
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
-                            .clickable { onSelectMode(mode) }
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PrivacyGuaranteeCard() {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                Icons.Default.Security,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(32.dp)
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Text(
-                    text = "纯本地离线架构保障",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface
+            Box(contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.size(64.dp),
+                    strokeWidth = 6.dp,
+                    trackColor = MaterialTheme.colorScheme.surface
                 )
-                Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "所有元数据与分类规则存储在本地 Room 数据库中，不向任何第三方云端传输您的照片与隐私。",
+                    text = "${(progress * 100).toInt()}%",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            Spacer(modifier = Modifier.width(18.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("媒体库", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = "${state.totalMediaCount} 项 · ${formatSize(state.totalSizeBytes)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "${state.classifiedCount} 项已整理 · ${state.unclassifiedCount} 项待整理",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun <T> SettingsChoiceGroup(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    options: List<Pair<T, String>>,
+    selectedValue: T,
+    onSelect: (T) -> Unit
+) {
+    SettingsRow(icon = icon, title = title, subtitle = subtitle)
+    Column(
+        modifier = Modifier.padding(start = 56.dp, end = 16.dp, bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        options.chunked(2).forEach { rowOptions ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                rowOptions.forEach { (value, label) ->
+                    val selected = value == selectedValue
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .clickable { onSelect(value) },
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                        },
+                        contentColor = if (selected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(label, style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                }
+                if (rowOptions.size == 1) Spacer(modifier = Modifier.weight(1f))
             }
         }
     }
@@ -568,19 +338,16 @@ private fun ExpiredMediaDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(if (expiredItems.isEmpty()) "过期扫描结果" else "发现 ${expiredItems.size} 项已过期媒体")
-        },
+        title = { Text("过期媒体") },
         text = {
             if (expiredItems.isEmpty()) {
-                Text("太棒了！当前没有任何达到过期保留天数的照片或截图。")
+                Text("当前没有需要清理的媒体。")
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = "以下媒体已超出其所在分类设定的保留时限，建议清理以释放存储空间：",
+                        text = "以下 ${expiredItems.size} 项媒体已超过分类的保留期限。删除后需要通过系统确认。",
                         style = MaterialTheme.typography.bodyMedium
                     )
-
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -600,23 +367,28 @@ private fun ExpiredMediaDialog(
             if (expiredItems.isNotEmpty()) {
                 Button(
                     onClick = onConfirmDelete,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("安全删除过期项")
-                }
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) { Text("删除 ${expiredItems.size} 项") }
             } else {
-                Button(onClick = onDismiss) {
-                    Text("好的")
-                }
+                Button(onClick = onDismiss) { Text("完成") }
             }
         },
         dismissButton = {
             if (expiredItems.isNotEmpty()) {
-                TextButton(onClick = onDismiss) {
-                    Text("稍后处理")
-                }
+                TextButton(onClick = onDismiss) { Text("取消") }
             }
         }
+    )
+}
+
+@Composable
+private fun SettingsDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = 56.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
     )
 }
 

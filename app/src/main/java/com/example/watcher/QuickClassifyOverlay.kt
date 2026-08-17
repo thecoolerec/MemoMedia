@@ -10,7 +10,6 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -20,19 +19,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.HourglassEmpty
-import androidx.compose.material.icons.filled.LocalFlorist
-import androidx.compose.material.icons.filled.ScreenshotMonitor
-import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,13 +36,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -61,11 +51,13 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import coil.compose.AsyncImage
 import com.example.LocalMediaApplication
 import com.example.core.enum.NotificationMode
-import com.example.core.enum.SessionStatus
 import com.example.core.model.CaptureSession
 import com.example.core.model.Category
 import com.example.core.model.DeliveryResult
 import com.example.core.model.MediaAsset
+import com.example.ui.components.getCategoryColor
+import com.example.ui.components.getCategoryIcon
+import com.example.ui.theme.LocalMediaTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -110,7 +102,7 @@ class QuickClassifyOverlay(private val context: Context) {
             setViewTreeLifecycleOwner(dummyLifecycleOwner)
             setViewTreeSavedStateRegistryOwner(dummyLifecycleOwner)
             setContent {
-                MaterialTheme {
+                LocalMediaTheme {
                     OverlayCard(
                         session = session,
                         items = items,
@@ -177,9 +169,9 @@ private fun OverlayCard(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         shape = RoundedCornerShape(24.dp),
-        color = Color(0xFF1E2433).copy(alpha = 0.96f),
-        tonalElevation = 8.dp,
-        shadowElevation = 12.dp
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 3.dp,
+        shadowElevation = 6.dp
     ) {
         Column(
             modifier = Modifier
@@ -192,30 +184,26 @@ private fun OverlayCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .background(Color(0xFF4CAF50), CircleShape)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = "${getSourceTitle(session.sourcePackage)} · 发现 ${session.mediaCount} 项新媒体",
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
+                        text = "${getSourceTitle(session.sourcePackage)} · ${session.mediaCount} 张",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
                 IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.size(28.dp)
+                    onClick = onDismiss
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "关闭",
-                        tint = Color.LightGray,
-                        modifier = Modifier.size(18.dp)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -230,30 +218,36 @@ private fun OverlayCard(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items.take(6).forEach { asset ->
-                        AsyncImage(
-                            model = Uri.parse(asset.contentUri),
-                            contentDescription = asset.displayName,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(10.dp))
-                        )
+                    items.take(5).forEachIndexed { index, asset ->
+                        Box {
+                            AsyncImage(
+                                model = Uri.parse(asset.contentUri),
+                                contentDescription = asset.displayName,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                            )
+                            if (index == 4 && items.size > 5) {
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color.Black.copy(alpha = 0.52f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "+${items.size - 5}",
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.labelLarge
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
             }
-
-            // Quick Category Action Pills
-            Text(
-                text = "一键归类：",
-                color = Color(0xFFB0BEC5),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
 
             Row(
                 modifier = Modifier
@@ -272,16 +266,16 @@ private fun OverlayCard(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(Color.White.copy(alpha = 0.12f))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
                         .clickable { onDismiss() }
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                        .heightIn(min = 48.dp)
+                        .padding(horizontal = 16.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = "稍后整理",
-                        color = Color(0xFFCFD8DC),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge
                     )
                 }
             }
@@ -294,34 +288,28 @@ private fun OverlayCategoryChip(
     category: Category,
     onClick: () -> Unit
 ) {
-    val chipColor = when (category.name) {
-        "生活" -> Color(0xFF2E7D32)
-        "工作" -> Color(0xFF1565C0)
-        "临时" -> Color(0xFFE65100)
-        "截图" -> Color(0xFF6A1B9A)
-        else -> Color(0xFF37474F)
-    }
+    val chipColor = getCategoryColor(category.name)
 
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(chipColor)
+            .background(chipColor.copy(alpha = 0.12f))
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Icon(
             imageVector = getCategoryIcon(category.icon),
             contentDescription = category.name,
-            tint = Color.White,
+            tint = chipColor,
             modifier = Modifier.size(16.dp)
         )
         Text(
             text = category.name,
-            color = Color.White,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.labelLarge
         )
     }
 }
@@ -334,16 +322,6 @@ private fun getSourceTitle(pkg: String?): String {
         pkg.contains("tencent.mobileqq", ignoreCase = true) -> "QQ"
         pkg.contains("screenshot", ignoreCase = true) -> "截图"
         else -> "新媒体"
-    }
-}
-
-private fun getCategoryIcon(iconName: String?): ImageVector {
-    return when (iconName) {
-        "local_florist" -> Icons.Default.LocalFlorist
-        "work" -> Icons.Default.Work
-        "hourglass_empty" -> Icons.Default.HourglassEmpty
-        "screenshot_monitor" -> Icons.Default.ScreenshotMonitor
-        else -> Icons.Default.Done
     }
 }
 
