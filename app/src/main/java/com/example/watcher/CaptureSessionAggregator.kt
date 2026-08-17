@@ -62,11 +62,12 @@ class CaptureSessionAggregator(
                 gap in 0..windowMs
 
         val sessionId: Long
-        if (shouldJoin && current != null) {
-            sessionId = current.id
+        if (shouldJoin) {
+            val joiningSession = checkNotNull(current)
+            sessionId = joiningSession.id
             sessionRepository.incrementMediaCount(sessionId, now)
-            activeSession = current.copy(
-                mediaCount = current.mediaCount + 1,
+            activeSession = joiningSession.copy(
+                mediaCount = joiningSession.mediaCount + 1,
                 endedAt = now
             )
         } else {

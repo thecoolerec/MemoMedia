@@ -125,6 +125,73 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("UPDATE category SET system_key = 'work' WHERE name = '工作' AND system_key IS NULL")
                 db.execSQL("UPDATE category SET system_key = 'temporary' WHERE name = '临时' AND system_key IS NULL")
                 db.execSQL("UPDATE category SET system_key = 'screenshots' WHERE name = '截图' AND system_key IS NULL")
+
+                // 4. Remove legacy tag metadata that is no longer part of TagEntity.
+                // Rebuilding also removes the obsolete unique index on tag.name.
+                db.execSQL(
+                    """
+                    CREATE TABLE `tag_new` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("INSERT INTO `tag_new` (`id`, `name`) SELECT `id`, `name` FROM `tag`")
+                db.execSQL("DROP TABLE `tag`")
+                db.execSQL("ALTER TABLE `tag_new` RENAME TO `tag`")
+
+                // Early V1 builds used owner_package_pattern and audit timestamps.
+                // Keep the rule data while normalizing the table to SourceRuleEntity.
+                val sourcePackageColumn = when {
+                    hasColumn(db, "source_rule", "source_package") -> "`source_package`"
+                    hasColumn(db, "source_rule", "owner_package_pattern") -> "`owner_package_pattern`"
+                    else -> "NULL"
+                }
+                db.execSQL(
+                    """
+                    CREATE TABLE `source_rule_new` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `enabled` INTEGER NOT NULL,
+                        `priority` INTEGER NOT NULL,
+                        `source_package` TEXT,
+                        `relative_path_pattern` TEXT,
+                        `bucket_pattern` TEXT,
+                        `media_type` TEXT,
+                        `target_category_id` INTEGER,
+                        `notification_mode` TEXT,
+                        `auto_classify` INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `source_rule_new` (
+                        `id`, `name`, `enabled`, `priority`, `source_package`,
+                        `relative_path_pattern`, `bucket_pattern`, `media_type`,
+                        `target_category_id`, `notification_mode`, `auto_classify`
+                    )
+                    SELECT
+                        `id`, `name`, `enabled`, `priority`, $sourcePackageColumn,
+                        `relative_path_pattern`, `bucket_pattern`, `media_type`,
+                        `target_category_id`, `notification_mode`, `auto_classify`
+                    FROM `source_rule`
+                    """.trimIndent()
+                )
+                db.execSQL("DROP TABLE `source_rule`")
+                db.execSQL("ALTER TABLE `source_rule_new` RENAME TO `source_rule`")
+                db.execSQL("CREATE INDEX `index_source_rule_priority` ON `source_rule` (`priority`)")
+
+                // Some V1 installations did not create the join table at all.
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `media_tag` (
+                        `media_id` INTEGER NOT NULL,
+                        `tag_id` INTEGER NOT NULL,
+                        PRIMARY KEY(`media_id`, `tag_id`)
+                    )
+                    """.trimIndent()
+                )
             }
 
             private fun hasColumn(db: SupportSQLiteDatabase, table: String, column: String): Boolean {

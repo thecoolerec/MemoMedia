@@ -125,6 +125,8 @@ class RoomMigrationTest {
                     // Insert sample early v1 data
                     db.execSQL("INSERT INTO category (id, name, sort_order, expire_action, indexing_enabled, is_system, created_at, updated_at) VALUES (1, '生活', 1, 'KEEP_FOREVER', 1, 1, 100, 100)")
                     db.execSQL("INSERT INTO category (id, name, sort_order, expire_action, indexing_enabled, is_system, created_at, updated_at) VALUES (2, '临时', 2, 'AUTO_TRASH', 1, 1, 100, 100)")
+                    db.execSQL("INSERT INTO tag (id, name, color, created_at) VALUES (3, '票据', '#ff0000', 100)")
+                    db.execSQL("INSERT INTO source_rule (id, name, priority, enabled, owner_package_pattern, relative_path_pattern, bucket_pattern, media_type, target_category_id, notification_mode, auto_classify, created_at, updated_at) VALUES (4, '相机规则', 50, 1, 'com.camera', '%DCIM%', NULL, 'IMAGE', 1, 'SILENT', 1, 100, 100)")
                     db.execSQL("INSERT INTO capture_session (id, source_package, media_type, started_at, ended_at, media_count, status) VALUES (10, 'com.camera', 'IMAGE', 1000, 2000, 1, 'READY')")
                     db.execSQL("INSERT INTO media_asset (id, media_store_id, content_uri, media_type, added_at, status, created_at, updated_at) VALUES (100, 555, 'content://media/external/images/media/555', 'IMAGE', 1000, 'UNCLASSIFIED', 1000, 1000)")
                 }
@@ -153,6 +155,13 @@ class RoomMigrationTest {
         assertNotNull(asset)
         assertEquals(555L, asset?.mediaStoreId)
         assertEquals(MediaStatus.PENDING.name, asset?.status)
+
+        val tag = roomDb.tagDao().getByName("票据")
+        assertEquals(3L, tag?.id)
+
+        val sourceRule = roomDb.sourceRuleDao().getById(4L)
+        assertEquals("com.camera", sourceRule?.sourcePackage)
+        assertEquals("%DCIM%", sourceRule?.relativePathPattern)
 
         // Verify that same mediaStoreId for different contentUri (e.g. video vs image) CAN now coexist
         val videoAssetWithSameId = MediaAssetEntity(

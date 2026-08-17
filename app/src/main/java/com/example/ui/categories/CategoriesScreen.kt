@@ -39,6 +39,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FloatingActionButton
@@ -742,7 +743,9 @@ private fun RuleEditorDialog(
 
                 ExposedDropdownMenuBox(
                     expanded = categoryDropdownExpanded,
-                    onExpandedChange = { categoryDropdownExpanded = !categoryDropdownExpanded }
+                    onExpandedChange = { expanded ->
+                        if (categories.isNotEmpty()) categoryDropdownExpanded = expanded
+                    }
                 ) {
                     OutlinedTextField(
                         value = categories.find { it.id == selectedCategoryId }?.name ?: "选择目标分类",
@@ -751,7 +754,10 @@ private fun RuleEditorDialog(
                         label = { Text("自动归入分类") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryDropdownExpanded) },
                         modifier = Modifier
-                            .menuAnchor()
+                            .menuAnchor(
+                                type = ExposedDropdownMenuAnchorType.PrimaryNotEditable,
+                                enabled = categories.isNotEmpty()
+                            )
                             .fillMaxWidth()
                     )
                     ExposedDropdownMenu(
