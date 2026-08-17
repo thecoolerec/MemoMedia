@@ -1,0 +1,71 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-debug-apk:
+    name: Build debug APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.3.1"
+          cache-provider: basic
+
+      - name: Create temporary debug keystore
+        run: >-
+          keytool -genkeypair
+          -keystore debug.keystore
+          -storepass android
+          -keypass android
+          -alias androiddebugkey
+          -keyalg RSA
+          -keysize 2048
+          -validity 10000
+          -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Build debug APK
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Prepare APK artifact
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/MemoMedia-debug.apk
+
+      - name: Upload APK
+        id: upload-apk
+        uses: actions/upload-artifact@v7
+        with:
+          name: MemoMedia-debug-${{ github.run_number }}
+          path: dist/MemoMedia-debug.apk
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+      - name: Add APK link to job summary
+        run: |
+          echo "### MemoMedia Debug APK" >> "$GITHUB_STEP_SUMMARY"
+          echo "[Download APK](${{ steps.upload-apk.outputs.artifact-url }})" >> "$GITHUB_STEP_SUMMARY"
