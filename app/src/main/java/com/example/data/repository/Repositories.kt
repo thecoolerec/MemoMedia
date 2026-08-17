@@ -86,7 +86,7 @@ class CategoryRepository(private val db: AppDatabase) {
 
     suspend fun save(category: Category): Long = dao.insert(category.toEntity())
     suspend fun update(category: Category) = dao.update(category.toEntity())
-    suspend fun delete(id: Long) = dao.deleteCategoryAndUnlink(id)
+    suspend fun delete(id: Long): Boolean = dao.deleteCategoryAndUnlink(id)
 }
 
 class TagRepository(private val db: AppDatabase) {

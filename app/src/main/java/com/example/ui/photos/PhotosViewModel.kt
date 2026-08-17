@@ -5,10 +5,10 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.LocalMediaApplication
-import com.example.core.enum.MediaStatus
 import com.example.core.model.Category
 import com.example.core.model.MediaAsset
 import com.example.core.model.Tag
+import com.example.core.model.needsOrganization
 import com.example.media.MediaDeletionHelper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -81,7 +81,7 @@ class PhotosViewModel(application: Application) : AndroidViewModel(application) 
 
         var filtered = when (categoryId) {
             null -> items // All
-            -1L -> items.filter { it.status == MediaStatus.PENDING } // 待整理
+            -1L -> items.filter { it.needsOrganization } // 待整理
             else -> items.filter { it.primaryCategoryId == categoryId }
         }
 

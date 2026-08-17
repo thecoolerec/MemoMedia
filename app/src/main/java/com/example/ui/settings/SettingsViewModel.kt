@@ -12,6 +12,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.LocalMediaApplication
 import com.example.core.enum.NotificationMode
 import com.example.core.model.MediaAsset
+import com.example.core.model.needsOrganization
 import com.example.media.MediaDeletionHelper
 import com.example.watcher.MediaJobService
 import com.example.watcher.MediaMonitorService
@@ -76,10 +77,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         actionFlow,
         settingsRepository.settings
     ) { allMedia, actions, config ->
-        val total = allMedia.size
-        val classified = allMedia.count { it.primaryCategoryId != null }
-        val unclassified = total - classified
-        val totalBytes = allMedia.sumOf { it.sizeBytes ?: 0L }
+        val manageableMedia = allMedia.filter {
+            it.primaryCategoryId != null || it.needsOrganization
+        }
+        val classified = manageableMedia.count { it.primaryCategoryId != null }
+        val unclassified = manageableMedia.count { it.needsOrganization }
+        val total = classified + unclassified
+        val totalBytes = manageableMedia.sumOf { it.sizeBytes ?: 0L }
 
         val overlayGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             Settings.canDrawOverlays(getApplication())

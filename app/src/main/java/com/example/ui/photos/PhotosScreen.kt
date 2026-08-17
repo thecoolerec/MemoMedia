@@ -68,7 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.core.enum.MediaStatus
+import com.example.core.model.needsOrganization
 import com.example.ui.components.CategoryPickerSheet
 import com.example.ui.components.EmptyStateCard
 import com.example.ui.components.MediaThumbnail
@@ -92,7 +92,7 @@ fun PhotosScreen(
     }
 
     val pendingCount = remember(state.items) {
-        state.items.count { it.status == MediaStatus.PENDING }
+        state.items.count { it.needsOrganization }
     }
 
     val deleteLauncher = rememberLauncherForActivityResult(
@@ -331,9 +331,9 @@ fun PhotosScreen(
             if (state.filteredItems.isEmpty()) {
                 EmptyStateCard(
                     icon = Icons.Default.PhotoLibrary,
-                    title = if (state.selectedCategoryId == -1L) "全部已整理" else "暂无照片",
+                    title = if (state.selectedCategoryId == -1L) "暂无待整理内容" else "暂无照片",
                     description = if (state.selectedCategoryId == -1L)
-                        "所有媒体已整理完毕，新照片会继续出现在待整理中。"
+                        "同步后，尚未分类的照片和视频会显示在这里。"
                     else
                         "暂无符合当前筛选条件的照片。",
                     actionLabel = "同步媒体库",

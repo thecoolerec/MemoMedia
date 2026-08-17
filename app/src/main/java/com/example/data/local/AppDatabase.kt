@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
         CaptureSessionEntity::class,
         SourceRuleEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -141,13 +141,38 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Older versions used UNCLASSIFIED for historical imports and for
+                // items detached from a deleted category. Normalize them so all
+                // existing installs use the same pending-work semantics.
+                db.execSQL(
+                    """
+                    UPDATE media_asset
+                    SET status = 'PENDING',
+                        capture_session_id = NULL,
+                        expire_at = NULL,
+                        updated_at = CAST(strftime('%s', 'now') AS INTEGER) * 1000
+                    WHERE primary_category_id IS NULL
+                      AND status = 'UNCLASSIFIED'
+                    """.trimIndent()
+                )
+
+                // A rule whose category was removed must no longer claim that it
+                // can auto-classify future media.
+                db.execSQL(
+                    "UPDATE source_rule SET auto_classify = 0, enabled = 0 WHERE target_category_id IS NULL AND auto_classify = 1"
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "local_media.db"
-                ).addMigrations(MIGRATION_1_2)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)

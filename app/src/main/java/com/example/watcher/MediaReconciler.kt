@@ -80,7 +80,7 @@ class MediaReconciler(
                     sizeBytes = sysMedia.sizeBytes,
                     capturedAt = sysMedia.dateTaken,
                     addedAt = sysMedia.dateAdded,
-                    status = MediaStatus.UNCLASSIFIED,
+                    status = MediaStatus.PENDING,
                     createdAt = now,
                     updatedAt = now
                 )
@@ -88,7 +88,8 @@ class MediaReconciler(
                 // Evaluate rule with snapshot to avoid N+1 queries
                 val routingDecision = ruleEngine.evaluateWithSnapshot(asset, activeRules, categoriesMap)
 
-                if (routingDecision.autoClassify && routingDecision.categoryId != null) {
+                val mayAutoClassify = effectiveMode != ReconcileMode.INITIAL_BACKFILL
+                if (mayAutoClassify && routingDecision.autoClassify && routingDecision.categoryId != null) {
                     val targetCategory = categoriesMap[routingDecision.categoryId]
                     if (targetCategory != null) {
                         val expireAt = policyEngine.calculateExpireAt(
@@ -117,10 +118,11 @@ class MediaReconciler(
                         )
                         mediaRepository.insert(asset)
                     } else {
-                        // Historical backfill or old boot catchup: import as UNCLASSIFIED without session
+                        // Historical media still needs explicit user organization, but does not
+                        // create a notification/session for every old item.
                         asset = asset.copy(
                             captureSessionId = null,
-                            status = MediaStatus.UNCLASSIFIED
+                            status = MediaStatus.PENDING
                         )
                         mediaRepository.insert(asset)
                     }

@@ -6,10 +6,13 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.core.enum.MediaStatus
 import com.example.core.enum.MediaType
 import com.example.core.enum.ReconcileMode
+import com.example.core.enum.ExpireAction
 import com.example.core.model.CaptureSession
 import com.example.core.model.MediaAsset
 import com.example.core.model.SystemMedia
 import com.example.data.local.AppDatabase
+import com.example.data.local.entity.CategoryEntity
+import com.example.data.local.entity.SourceRuleEntity
 import com.example.data.repository.AppSettingsRepository
 import com.example.data.repository.CaptureSessionRepository
 import com.example.data.repository.CategoryRepository
@@ -148,9 +151,62 @@ class BootCatchupTest {
             assertEquals(MediaStatus.PENDING.name, recentAsset?.status)
             assertNotNull(recentAsset?.captureSessionId)
 
-            // Old asset should be UNCLASSIFIED and NOT assigned to a session
-            assertEquals(MediaStatus.UNCLASSIFIED.name, oldAsset?.status)
+            // Old asset should still be explicitly pending, but should not create
+            // a noisy notification/session during boot catch-up.
+            assertEquals(MediaStatus.PENDING.name, oldAsset?.status)
             assertNull(oldAsset?.captureSessionId)
+        }
+    }
+
+    @Test
+    fun initialBackfillLeavesExistingMediaForUserToOrganize() {
+        runBlocking {
+            val now = System.currentTimeMillis()
+            val screenshotCategoryId = db.categoryDao().insert(
+                CategoryEntity(
+                    name = "截图",
+                    systemKey = "screenshots",
+                    retentionDays = 30,
+                    expireAction = ExpireAction.REVIEW_DELETE.name,
+                    isSystem = true,
+                    createdAt = now,
+                    updatedAt = now
+                )
+            )
+            db.sourceRuleDao().insert(
+                SourceRuleEntity(
+                    name = "截图自动分类",
+                    enabled = true,
+                    priority = 100,
+                    relativePathPattern = "%Screenshots%",
+                    targetCategoryId = screenshotCategoryId,
+                    autoClassify = true
+                )
+            )
+            fakeMediaStoreDataSource.fakeMedia.add(
+                SystemMedia(
+                    mediaStoreId = 201L,
+                    contentUri = "content://media/external/images/media/201",
+                    mediaType = MediaType.IMAGE,
+                    mimeType = "image/png",
+                    displayName = "Screenshot_201.png",
+                    ownerPackage = null,
+                    relativePath = "Pictures/Screenshots/",
+                    bucketName = "Screenshots",
+                    width = 1080,
+                    height = 2400,
+                    sizeBytes = 500_000L,
+                    dateTaken = now - 60_000L,
+                    dateAdded = now - 60_000L
+                )
+            )
+
+            assertEquals(1, reconciler.reconcile(ReconcileMode.INITIAL_BACKFILL))
+
+            val asset = db.mediaAssetDao().getById(1L)
+            assertEquals(MediaStatus.PENDING.name, asset?.status)
+            assertNull(asset?.primaryCategoryId)
+            assertNull(asset?.captureSessionId)
         }
     }
 }

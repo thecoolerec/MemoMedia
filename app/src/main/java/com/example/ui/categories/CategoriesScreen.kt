@@ -87,6 +87,7 @@ fun CategoriesScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var selectedTabIndex by remember { mutableIntStateOf(0) }
+    var pendingDelete by remember { mutableStateOf<CategoryWithStats?>(null) }
 
     Scaffold(
         topBar = {
@@ -144,7 +145,7 @@ fun CategoriesScreen(
                 CategoryGridTab(
                     categoryStats = state.categoryStats,
                     onEdit = { viewModel.openEditCategoryDialog(it) },
-                    onDelete = { viewModel.deleteCategory(it.id) }
+                    onDelete = { pendingDelete = it }
                 )
             } else {
                 RulesListTab(
@@ -155,6 +156,38 @@ fun CategoriesScreen(
                 )
             }
         }
+    }
+
+    pendingDelete?.let { item ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("删除「${item.category.name}」？") },
+            text = {
+                Text(
+                    if (item.mediaCount > 0) {
+                        "分类中的 ${item.mediaCount} 项会回到待整理，相关自动分类规则也会停用。媒体文件本身不会被删除。"
+                    } else {
+                        "相关自动分类规则会停用。媒体文件本身不会被删除。"
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteCategory(item.category.id)
+                        pendingDelete = null
+                    },
+                    modifier = Modifier.testTag("confirm_delete_category")
+                ) {
+                    Text("删除分类", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 
     if (state.isCreateCategoryDialogOpen) {
@@ -192,7 +225,7 @@ fun CategoriesScreen(
 private fun CategoryGridTab(
     categoryStats: List<CategoryWithStats>,
     onEdit: (Category) -> Unit,
-    onDelete: (Category) -> Unit
+    onDelete: (CategoryWithStats) -> Unit
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
@@ -210,7 +243,7 @@ private fun CategoryGridTab(
             CategoryCard2Column(
                 item = item,
                 onEdit = { onEdit(item.category) },
-                onDelete = { onDelete(item.category) }
+                onDelete = { onDelete(item) }
             )
         }
     }
@@ -673,8 +706,6 @@ private fun RuleEditorDialog(
     var relativePathPattern by remember { mutableStateOf("") }
     var selectedCategoryId by remember { mutableStateOf(categories.firstOrNull()?.id) }
     var notificationMode by remember { mutableStateOf(NotificationMode.SILENT) }
-    var autoClassify by remember { mutableStateOf(true) }
-
     var categoryDropdownExpanded by remember { mutableStateOf(false) }
 
     AlertDialog(
@@ -744,7 +775,7 @@ private fun RuleEditorDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("自动静默分类 (不打扰通知)")
+                    Text("分类时静默处理（不弹通知）")
                     Switch(
                         checked = notificationMode == NotificationMode.SILENT,
                         onCheckedChange = {
@@ -758,10 +789,10 @@ private fun RuleEditorDialog(
             Button(
                 onClick = {
                     if (name.isNotBlank()) {
-                        onSave(name.trim(), sourcePackage, relativePathPattern, selectedCategoryId, notificationMode, autoClassify)
+                        onSave(name.trim(), sourcePackage, relativePathPattern, selectedCategoryId, notificationMode, true)
                     }
                 },
-                enabled = name.isNotBlank()
+                enabled = name.isNotBlank() && selectedCategoryId != null
             ) {
                 Text("添加规则")
             }

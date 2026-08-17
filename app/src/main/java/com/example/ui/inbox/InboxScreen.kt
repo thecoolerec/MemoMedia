@@ -126,8 +126,8 @@ fun InboxScreen(
             ) {
                 EmptyStateCard(
                     icon = Icons.Default.CheckCircle,
-                    title = "已全部整理",
-                    description = "新的照片和截图会继续出现在这里。",
+                    title = "暂无待整理内容",
+                    description = "同步后，尚未分类的照片和视频会显示在这里。",
                     actionLabel = "同步媒体库",
                     onActionClick = { viewModel.refresh() }
                 )

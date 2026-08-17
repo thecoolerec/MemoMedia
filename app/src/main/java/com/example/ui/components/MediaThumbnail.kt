@@ -33,6 +33,7 @@ import com.example.core.enum.MediaStatus
 import com.example.core.enum.MediaType
 import com.example.core.model.Category
 import com.example.core.model.MediaAsset
+import com.example.core.model.needsOrganization
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -94,7 +95,7 @@ fun MediaThumbnail(
 
         // Status indicators (subtle dot for pending, timer icon for expired)
         if (!isSelectionMode) {
-            if (asset.status == MediaStatus.PENDING) {
+            if (asset.needsOrganization) {
                 // Subtle pending dot in top-right
                 Box(
                     modifier = Modifier

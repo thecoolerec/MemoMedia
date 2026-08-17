@@ -20,10 +20,10 @@ interface MediaAssetDao {
     @Query("SELECT * FROM media_asset WHERE status != 'DELETED' ORDER BY captured_at DESC, added_at DESC")
     fun observeTimeline(): Flow<List<MediaAssetEntity>>
 
-    @Query("SELECT * FROM media_asset WHERE status = 'PENDING' ORDER BY added_at DESC")
+    @Query("SELECT * FROM media_asset WHERE primary_category_id IS NULL AND status NOT IN ('DELETED', 'PENDING_DELETE', 'MISSING') ORDER BY captured_at DESC, added_at DESC")
     fun observePending(): Flow<List<MediaAssetEntity>>
 
-    @Query("SELECT * FROM media_asset WHERE primary_category_id IS NULL AND status != 'DELETED' ORDER BY captured_at DESC, added_at DESC")
+    @Query("SELECT * FROM media_asset WHERE primary_category_id IS NULL AND status NOT IN ('DELETED', 'PENDING_DELETE', 'MISSING') ORDER BY captured_at DESC, added_at DESC")
     fun observeUnclassified(): Flow<List<MediaAssetEntity>>
 
     @Query("SELECT * FROM media_asset WHERE primary_category_id = :categoryId AND status != 'DELETED' ORDER BY captured_at DESC, added_at DESC")
@@ -83,10 +83,10 @@ interface MediaAssetDao {
     @Query("SELECT COUNT(*) FROM media_asset WHERE status != 'DELETED'")
     fun observeTotalCount(): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM media_asset WHERE status = 'PENDING'")
+    @Query("SELECT COUNT(*) FROM media_asset WHERE primary_category_id IS NULL AND status NOT IN ('DELETED', 'PENDING_DELETE', 'MISSING')")
     fun observePendingCount(): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM media_asset WHERE primary_category_id IS NULL AND status != 'DELETED'")
+    @Query("SELECT COUNT(*) FROM media_asset WHERE primary_category_id IS NULL AND status NOT IN ('DELETED', 'PENDING_DELETE', 'MISSING')")
     fun observeUnclassifiedCount(): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM media_asset WHERE primary_category_id = :categoryId AND status != 'DELETED'")
@@ -128,17 +128,21 @@ interface CategoryDao {
     @Query("DELETE FROM category WHERE id = :id AND is_system = 0")
     suspend fun deleteById(id: Long)
 
-    @Query("UPDATE media_asset SET primary_category_id = NULL, status = 'UNCLASSIFIED' WHERE primary_category_id = :categoryId")
-    suspend fun nullifyMediaCategory(categoryId: Long)
+    @Query("UPDATE media_asset SET primary_category_id = NULL, capture_session_id = NULL, expire_at = NULL, status = 'PENDING', updated_at = :now WHERE primary_category_id = :categoryId")
+    suspend fun moveMediaBackToPending(categoryId: Long, now: Long)
 
-    @Query("UPDATE source_rule SET target_category_id = NULL WHERE target_category_id = :categoryId")
+    @Query("UPDATE source_rule SET target_category_id = NULL, auto_classify = 0, enabled = 0 WHERE target_category_id = :categoryId")
     suspend fun nullifySourceRuleCategory(categoryId: Long)
 
     @Transaction
-    suspend fun deleteCategoryAndUnlink(id: Long) {
-        nullifyMediaCategory(id)
+    suspend fun deleteCategoryAndUnlink(id: Long): Boolean {
+        val category = getById(id) ?: return false
+        if (category.isSystem) return false
+
+        moveMediaBackToPending(id, System.currentTimeMillis())
         nullifySourceRuleCategory(id)
         deleteById(id)
+        return true
     }
 }
 

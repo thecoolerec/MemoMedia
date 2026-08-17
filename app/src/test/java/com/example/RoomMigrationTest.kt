@@ -126,7 +126,7 @@ class RoomMigrationTest {
                     db.execSQL("INSERT INTO category (id, name, sort_order, expire_action, indexing_enabled, is_system, created_at, updated_at) VALUES (1, '生活', 1, 'KEEP_FOREVER', 1, 1, 100, 100)")
                     db.execSQL("INSERT INTO category (id, name, sort_order, expire_action, indexing_enabled, is_system, created_at, updated_at) VALUES (2, '临时', 2, 'AUTO_TRASH', 1, 1, 100, 100)")
                     db.execSQL("INSERT INTO capture_session (id, source_package, media_type, started_at, ended_at, media_count, status) VALUES (10, 'com.camera', 'IMAGE', 1000, 2000, 1, 'READY')")
-                    db.execSQL("INSERT INTO media_asset (id, media_store_id, content_uri, media_type, added_at, status, created_at, updated_at) VALUES (100, 555, 'content://media/external/images/media/555', 'IMAGE', 1000, 'PENDING', 1000, 1000)")
+                    db.execSQL("INSERT INTO media_asset (id, media_store_id, content_uri, media_type, added_at, status, created_at, updated_at) VALUES (100, 555, 'content://media/external/images/media/555', 'IMAGE', 1000, 'UNCLASSIFIED', 1000, 1000)")
                 }
 
                 override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {}
@@ -136,7 +136,7 @@ class RoomMigrationTest {
 
         // 2. Open via Room with MIGRATION_1_2
         val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbName)
-            .addMigrations(AppDatabase.MIGRATION_1_2)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
             .build()
 
         // 3. Verify Room DB opened and data migrated correctly
@@ -152,6 +152,7 @@ class RoomMigrationTest {
         val asset = roomDb.mediaAssetDao().getById(100L)
         assertNotNull(asset)
         assertEquals(555L, asset?.mediaStoreId)
+        assertEquals(MediaStatus.PENDING.name, asset?.status)
 
         // Verify that same mediaStoreId for different contentUri (e.g. video vs image) CAN now coexist
         val videoAssetWithSameId = MediaAssetEntity(
@@ -278,7 +279,7 @@ class RoomMigrationTest {
             helperFactory.create(config).writableDatabase.close()
 
             val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbName)
-                .addMigrations(AppDatabase.MIGRATION_1_2)
+                .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
                 .build()
 
             val session = roomDb.captureSessionDao().getById(20L)

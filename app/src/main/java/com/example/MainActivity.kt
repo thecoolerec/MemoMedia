@@ -153,9 +153,9 @@ fun MainAppScreen() {
 
     val navController = rememberNavController()
 
-    // Observe unclassified media count for badge on Inbox tab
-    val timelineMedia by app.mediaRepository.observeTimeline().collectAsStateWithLifecycle(emptyList())
-    val pendingCount = timelineMedia.count { it.primaryCategoryId == null }
+    // Use the same database definition as the Inbox so its badge can never
+    // disagree with the content shown after navigation.
+    val pendingCount by app.mediaRepository.observePendingCount().collectAsStateWithLifecycle(0)
 
     Scaffold(
         bottomBar = {

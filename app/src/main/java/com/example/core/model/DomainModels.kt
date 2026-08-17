@@ -31,6 +31,17 @@ data class MediaAsset(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
+/**
+ * A media item needs organizing when it is still manageable but has no category.
+ * Category assignment is the source of truth; status only describes the current
+ * lifecycle operation and may contain values written by older app versions.
+ */
+val MediaAsset.needsOrganization: Boolean
+    get() = primaryCategoryId == null &&
+        status != MediaStatus.DELETED &&
+        status != MediaStatus.PENDING_DELETE &&
+        status != MediaStatus.MISSING
+
 data class Category(
     val id: Long = 0,
     val systemKey: String? = null,
