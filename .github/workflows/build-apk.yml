@@ -29,10 +29,10 @@ jobs:
               --tests com.example.CategoryDeletionTest
               --tests com.example.ClassifyTransactionTest
               --tests com.example.DeleteMediaUseCaseTest
-          - name: watcher
-            tests: >-
-              --tests com.example.BootCatchupTest
-              --tests com.example.SessionDeliveryTest
+          - name: boot-catchup
+            tests: --tests com.example.BootCatchupTest
+          - name: session-delivery
+            tests: --tests com.example.SessionDeliveryTest
           - name: smoke
             tests: >-
               --tests com.example.ExampleRobolectricTest
