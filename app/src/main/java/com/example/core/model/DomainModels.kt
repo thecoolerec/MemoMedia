@@ -100,3 +100,16 @@ data class SystemMedia(
     val dateTaken: Long?,
     val dateAdded: Long
 )
+
+sealed interface DeliveryResult {
+    data class Success(
+        val mode: NotificationMode
+    ) : DeliveryResult
+
+    data class Failure(
+        val mode: NotificationMode,
+        val reason: String,
+        val throwable: Throwable? = null
+    ) : DeliveryResult
+}
+

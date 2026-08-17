@@ -13,7 +13,11 @@ import kotlinx.coroutines.withContext
 
 sealed interface DeleteMediaResult {
     data class Success(val deletedCount: Int) : DeleteMediaResult
-    data class NeedsUserConsent(val intentSenderRequest: IntentSenderRequest, val targetIds: List<Long>) : DeleteMediaResult
+    data class NeedsUserConsent(
+        val intentSenderRequest: IntentSenderRequest,
+        val activeBatchAssets: List<MediaAsset>,
+        val remainingAssets: List<MediaAsset>
+    ) : DeleteMediaResult
     data class Failure(val error: Throwable) : DeleteMediaResult
 }
 
@@ -22,38 +26,68 @@ class DeleteMediaUseCase(
     private val mediaRepository: MediaRepository,
     private val mediaStoreDataSource: MediaStoreDataSource
 ) {
+    companion object {
+        const val DELETE_BATCH_SIZE = 1000
+    }
+
     suspend fun execute(assets: List<MediaAsset>): DeleteMediaResult = withContext(Dispatchers.IO) {
         if (assets.isEmpty()) return@withContext DeleteMediaResult.Success(0)
 
-        val ids = assets.map { it.id }
-        // Mark PENDING_DELETE in database
+        val currentBatch = assets.take(DELETE_BATCH_SIZE)
+        val remaining = assets.drop(DELETE_BATCH_SIZE)
+
+        // Mark PENDING_DELETE ONLY for current batch
+        val ids = currentBatch.map { it.id }
         for (id in ids) {
             mediaRepository.updateStatus(id, MediaStatus.PENDING_DELETE)
         }
 
-        val uris = assets.map { it.contentUri }
+        val uris = currentBatch.map { it.contentUri }
         val deleteRequest = MediaDeletionHelper.createDeleteRequestOrDeleteDirectly(context, uris)
 
         if (deleteRequest != null) {
-            return@withContext DeleteMediaResult.NeedsUserConsent(deleteRequest, ids)
+            DeleteMediaResult.NeedsUserConsent(
+                intentSenderRequest = deleteRequest,
+                activeBatchAssets = currentBatch,
+                remainingAssets = remaining
+            )
         } else {
             // Direct delete attempted on Android 10 and below, verify now
-            return@withContext verifyAndFinalize(assets)
+            val batchDeletedCount = verifyAndFinalize(currentBatch)
+            if (remaining.isNotEmpty()) {
+                val nextResult = execute(remaining)
+                when (nextResult) {
+                    is DeleteMediaResult.Success -> DeleteMediaResult.Success(batchDeletedCount + nextResult.deletedCount)
+                    else -> nextResult
+                }
+            } else {
+                DeleteMediaResult.Success(batchDeletedCount)
+            }
         }
     }
 
-    suspend fun onUserConsentResult(assets: List<MediaAsset>, success: Boolean): DeleteMediaResult = withContext(Dispatchers.IO) {
+    suspend fun onUserConsentResult(
+        activeBatchAssets: List<MediaAsset>,
+        remainingAssets: List<MediaAsset>,
+        success: Boolean
+    ): DeleteMediaResult = withContext(Dispatchers.IO) {
         if (success) {
-            verifyAndFinalize(assets)
+            val batchDeletedCount = verifyAndFinalize(activeBatchAssets)
+            if (remainingAssets.isNotEmpty()) {
+                execute(remainingAssets)
+            } else {
+                DeleteMediaResult.Success(batchDeletedCount)
+            }
         } else {
-            for (asset in assets) {
-                mediaRepository.updateStatus(asset.id, MediaStatus.DELETE_FAILED)
+            // User cancelled: Revert active batch from PENDING_DELETE back to EXPIRED
+            for (asset in activeBatchAssets) {
+                mediaRepository.updateStatus(asset.id, MediaStatus.EXPIRED)
             }
             DeleteMediaResult.Failure(Exception("User cancelled deletion"))
         }
     }
 
-    private suspend fun verifyAndFinalize(assets: List<MediaAsset>): DeleteMediaResult {
+    suspend fun verifyAndFinalize(assets: List<MediaAsset>): Int {
         val reallyDeletedIds = mutableListOf<Long>()
         for (asset in assets) {
             val exists = mediaStoreDataSource.exists(Uri.parse(asset.contentUri))
@@ -66,6 +100,7 @@ class DeleteMediaUseCase(
         if (reallyDeletedIds.isNotEmpty()) {
             mediaRepository.markDeleted(reallyDeletedIds)
         }
-        return DeleteMediaResult.Success(reallyDeletedIds.size)
+        return reallyDeletedIds.size
     }
 }
+

@@ -132,8 +132,7 @@ fun MainAppScreen() {
         val newState = checkMediaAccessState(context)
         accessState = newState
         if (newState != MediaAccessState.None) {
-            MediaMonitorService.start(context)
-            MediaJobService.schedule(context)
+            app.monitoringController.applyCurrentState()
         }
     }
 
@@ -141,8 +140,7 @@ fun MainAppScreen() {
         if (accessState == MediaAccessState.None) {
             permissionLauncher.launch(permissionsToRequest)
         } else {
-            MediaMonitorService.start(context)
-            MediaJobService.schedule(context)
+            app.monitoringController.applyCurrentState()
         }
     }
 

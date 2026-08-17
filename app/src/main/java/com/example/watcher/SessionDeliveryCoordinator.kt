@@ -6,6 +6,7 @@ import android.provider.Settings
 import com.example.core.enum.DeliveryStatus
 import com.example.core.enum.NotificationMode
 import com.example.core.model.CaptureSession
+import com.example.core.model.DeliveryResult
 import com.example.data.repository.AppSettingsRepository
 import com.example.data.repository.CaptureSessionRepository
 import com.example.data.repository.CategoryRepository
@@ -22,7 +23,7 @@ class SessionDeliveryCoordinator(
     private val notificationManager: MediaNotificationManager,
     private val overlay: QuickClassifyOverlay
 ) {
-    suspend fun deliverSession(session: CaptureSession) = withContext(Dispatchers.Main) {
+    suspend fun deliverSession(session: CaptureSession): DeliveryResult = withContext(Dispatchers.Main) {
         val categories = withContext(Dispatchers.IO) { categoryRepository.getAll() }
         val items = withContext(Dispatchers.IO) { mediaRepository.getBySession(session.id) }
         val settings = withContext(Dispatchers.IO) { settingsRepository.getSnapshot() }
@@ -34,12 +35,16 @@ class SessionDeliveryCoordinator(
                 withContext(Dispatchers.IO) {
                     sessionRepository.updateDeliveryStatus(session.id, DeliveryStatus.DELIVERED_SILENT.name)
                 }
+                DeliveryResult.Success(NotificationMode.SILENT)
             }
             NotificationMode.NOTIFICATION, NotificationMode.HEADS_UP -> {
-                notificationManager.showSessionReadyNotification(session, categories)
-                withContext(Dispatchers.IO) {
-                    sessionRepository.updateDeliveryStatus(session.id, DeliveryStatus.DELIVERED_NOTIFICATION.name)
+                val result = notificationManager.showSessionReadyNotification(session, categories)
+                if (result is DeliveryResult.Success) {
+                    withContext(Dispatchers.IO) {
+                        sessionRepository.updateDeliveryStatus(session.id, DeliveryStatus.DELIVERED_NOTIFICATION.name)
+                    }
                 }
+                result
             }
             NotificationMode.OVERLAY -> {
                 val hasOverlayPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -48,19 +53,35 @@ class SessionDeliveryCoordinator(
                     true
                 }
 
-                if (hasOverlayPermission) {
-                    overlay.show(session, items, categories)
-                    withContext(Dispatchers.IO) {
-                        sessionRepository.updateDeliveryStatus(session.id, DeliveryStatus.DELIVERED_OVERLAY.name)
+                if (settings.overlayEnabled && hasOverlayPermission) {
+                    val overlayResult = overlay.show(session, items, categories)
+                    if (overlayResult is DeliveryResult.Success) {
+                        withContext(Dispatchers.IO) {
+                            sessionRepository.updateDeliveryStatus(session.id, DeliveryStatus.DELIVERED_OVERLAY.name)
+                        }
+                        overlayResult
+                    } else {
+                        // Fallback to notification when overlay display fails
+                        val notifResult = notificationManager.showSessionReadyNotification(session, categories)
+                        if (notifResult is DeliveryResult.Success) {
+                            withContext(Dispatchers.IO) {
+                                sessionRepository.updateDeliveryStatus(session.id, DeliveryStatus.DELIVERED_NOTIFICATION.name)
+                            }
+                        }
+                        notifResult
                     }
                 } else {
-                    // Fallback to Notification when overlay permission is not granted
-                    notificationManager.showSessionReadyNotification(session, categories)
-                    withContext(Dispatchers.IO) {
-                        sessionRepository.updateDeliveryStatus(session.id, DeliveryStatus.DELIVERED_NOTIFICATION.name)
+                    // Fallback to Notification when overlay is disabled in settings or permission is not granted
+                    val notifResult = notificationManager.showSessionReadyNotification(session, categories)
+                    if (notifResult is DeliveryResult.Success) {
+                        withContext(Dispatchers.IO) {
+                            sessionRepository.updateDeliveryStatus(session.id, DeliveryStatus.DELIVERED_NOTIFICATION.name)
+                        }
                     }
+                    notifResult
                 }
             }
         }
     }
 }
+

@@ -26,16 +26,19 @@ object MediaDeletionHelper {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val pendingIntent: PendingIntent = MediaStore.createDeleteRequest(resolver, uriList)
-            return IntentSenderRequest.Builder(pendingIntent.intentSender).build()
-        } else {
-            // Direct delete on Android 10 and below
-            for (uri in uriList) {
-                runCatching {
-                    resolver.delete(uri, null, null)
-                }
+            val pendingIntent: PendingIntent? = runCatching {
+                MediaStore.createDeleteRequest(resolver, uriList)
+            }.getOrNull()
+            if (pendingIntent != null) {
+                return IntentSenderRequest.Builder(pendingIntent.intentSender).build()
             }
-            return null
         }
+        // Direct delete on Android 10 and below or fallback
+        for (uri in uriList) {
+            runCatching {
+                resolver.delete(uri, null, null)
+            }
+        }
+        return null
     }
 }

@@ -48,6 +48,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _isScanning = MutableStateFlow(false)
     private val _isRetentionScanning = MutableStateFlow(false)
     private val _expiredItems = MutableStateFlow<List<MediaAsset>>(emptyList())
+    private val _activeBatch = MutableStateFlow<List<MediaAsset>>(emptyList())
+    private val _remainingAssets = MutableStateFlow<List<MediaAsset>>(emptyList())
     private val _showExpiredDialog = MutableStateFlow(false)
     private val _pendingDeleteRequest = MutableStateFlow<IntentSenderRequest?>(null)
 
@@ -136,13 +138,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun toggleBackgroundService(enable: Boolean) {
-        settingsRepository.setServiceRunning(enable)
-        val context = getApplication<Application>()
         if (enable) {
-            MediaMonitorService.start(context)
-            MediaJobService.schedule(context)
+            app.monitoringController.enable()
         } else {
-            MediaMonitorService.stop(context)
+            app.monitoringController.disable()
         }
     }
 
@@ -156,34 +155,49 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun requestDeleteExpiredMedia(items: List<MediaAsset>) {
         viewModelScope.launch {
             val result = app.deleteMediaUseCase.execute(items)
-            when (result) {
-                is com.example.domain.DeleteMediaResult.NeedsUserConsent -> {
-                    _pendingDeleteRequest.value = result.intentSenderRequest
-                }
-                is com.example.domain.DeleteMediaResult.Success -> {
-                    _expiredItems.value = emptyList()
-                    _showExpiredDialog.value = false
-                }
-                is com.example.domain.DeleteMediaResult.Failure -> {
-                    // Handled
-                }
-            }
+            handleDeleteResult(result)
         }
     }
 
-    fun confirmDeletedInDb(items: List<MediaAsset> = _expiredItems.value) {
+    fun confirmDeletedInDb() {
         viewModelScope.launch {
-            app.deleteMediaUseCase.onUserConsentResult(items, true)
-            _expiredItems.value = emptyList()
-            _showExpiredDialog.value = false
-            _pendingDeleteRequest.value = null
+            val active = _activeBatch.value
+            val remaining = _remainingAssets.value
+            val result = app.deleteMediaUseCase.onUserConsentResult(active, remaining, true)
+            handleDeleteResult(result)
         }
     }
 
     fun cancelDeleteRequest() {
         viewModelScope.launch {
-            app.deleteMediaUseCase.onUserConsentResult(_expiredItems.value, false)
+            val active = _activeBatch.value
+            val remaining = _remainingAssets.value
+            app.deleteMediaUseCase.onUserConsentResult(active, remaining, false)
+            _activeBatch.value = emptyList()
+            _remainingAssets.value = emptyList()
             _pendingDeleteRequest.value = null
+        }
+    }
+
+    private fun handleDeleteResult(result: com.example.domain.DeleteMediaResult) {
+        when (result) {
+            is com.example.domain.DeleteMediaResult.NeedsUserConsent -> {
+                _activeBatch.value = result.activeBatchAssets
+                _remainingAssets.value = result.remainingAssets
+                _pendingDeleteRequest.value = result.intentSenderRequest
+            }
+            is com.example.domain.DeleteMediaResult.Success -> {
+                _activeBatch.value = emptyList()
+                _remainingAssets.value = emptyList()
+                _pendingDeleteRequest.value = null
+                _expiredItems.value = emptyList()
+                _showExpiredDialog.value = false
+            }
+            is com.example.domain.DeleteMediaResult.Failure -> {
+                _activeBatch.value = emptyList()
+                _remainingAssets.value = emptyList()
+                _pendingDeleteRequest.value = null
+            }
         }
     }
 }

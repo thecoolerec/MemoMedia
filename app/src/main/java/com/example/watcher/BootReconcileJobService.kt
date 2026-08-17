@@ -7,6 +7,7 @@ import android.app.job.JobService
 import android.content.ComponentName
 import android.content.Context
 import com.example.LocalMediaApplication
+import com.example.core.enum.ReconcileMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -24,6 +25,11 @@ class BootReconcileJobService : JobService() {
             
             scheduler.schedule(builder.build())
         }
+
+        fun cancel(context: Context) {
+            val scheduler = context.getSystemService(Context.JOB_SCHEDULER_SERVICE) as? JobScheduler ?: return
+            scheduler.cancel(JOB_ID)
+        }
     }
 
     override fun onStartJob(params: JobParameters?): Boolean {
@@ -31,7 +37,7 @@ class BootReconcileJobService : JobService() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                app.mediaReconciler.reconcile(forceFullScan = true)
+                app.mediaReconciler.reconcile(ReconcileMode.BOOT_CATCHUP)
                 app.retentionScanner.scanAndMarkExpired()
             } finally {
                 jobFinished(params, false)

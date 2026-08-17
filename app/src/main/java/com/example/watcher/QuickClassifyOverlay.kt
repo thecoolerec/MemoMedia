@@ -60,9 +60,11 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import coil.compose.AsyncImage
 import com.example.LocalMediaApplication
+import com.example.core.enum.NotificationMode
 import com.example.core.enum.SessionStatus
 import com.example.core.model.CaptureSession
 import com.example.core.model.Category
+import com.example.core.model.DeliveryResult
 import com.example.core.model.MediaAsset
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -72,9 +74,12 @@ class QuickClassifyOverlay(private val context: Context) {
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private var overlayView: View? = null
 
-    fun show(session: CaptureSession, items: List<MediaAsset>, categories: List<Category>) {
+    fun show(session: CaptureSession, items: List<MediaAsset>, categories: List<Category>): DeliveryResult {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
-            return
+            return DeliveryResult.Failure(
+                mode = NotificationMode.OVERLAY,
+                reason = "Overlay permission not granted"
+            )
         }
 
         dismiss()
@@ -123,11 +128,17 @@ class QuickClassifyOverlay(private val context: Context) {
         }
 
         overlayView = composeView
-        try {
+        return try {
             windowManager.addView(composeView, layoutParams)
+            DeliveryResult.Success(NotificationMode.OVERLAY)
         } catch (e: Exception) {
             e.printStackTrace()
             overlayView = null
+            DeliveryResult.Failure(
+                mode = NotificationMode.OVERLAY,
+                reason = "WindowManager addView failed: ${e.message}",
+                throwable = e
+            )
         }
     }
 

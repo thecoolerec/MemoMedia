@@ -43,7 +43,8 @@ class PhotosViewModel(application: Application) : AndroidViewModel(application) 
     private val _selectedAssetTags = MutableStateFlow<List<Tag>>(emptyList())
     private val _isRefreshing = MutableStateFlow(false)
     private val _pendingDeleteRequest = MutableStateFlow<IntentSenderRequest?>(null)
-    private var pendingDeleteIds = listOf<Long>()
+    private var activeBatchAssets = listOf<MediaAsset>()
+    private var remainingAssets = listOf<MediaAsset>()
 
     val uiState: StateFlow<PhotosUiState> = combine(
         mediaRepository.observeTimeline(),
@@ -176,18 +177,7 @@ class PhotosViewModel(application: Application) : AndroidViewModel(application) 
     fun deleteAsset(asset: MediaAsset) {
         viewModelScope.launch {
             val result = app.deleteMediaUseCase.execute(listOf(asset))
-            when (result) {
-                is com.example.domain.DeleteMediaResult.NeedsUserConsent -> {
-                    pendingDeleteIds = listOf(asset.id)
-                    _pendingDeleteRequest.value = result.intentSenderRequest
-                }
-                is com.example.domain.DeleteMediaResult.Success -> {
-                    closeDetail()
-                }
-                is com.example.domain.DeleteMediaResult.Failure -> {
-                    // Handled
-                }
-            }
+            handleDeleteResult(result)
         }
     }
 
@@ -196,42 +186,46 @@ class PhotosViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val targetAssets = uiState.value.items.filter { selectedIds.contains(it.id) }
             val result = app.deleteMediaUseCase.execute(targetAssets)
-            when (result) {
-                is com.example.domain.DeleteMediaResult.NeedsUserConsent -> {
-                    pendingDeleteIds = selectedIds
-                    _pendingDeleteRequest.value = result.intentSenderRequest
-                }
-                is com.example.domain.DeleteMediaResult.Success -> {
-                    clearSelection()
-                }
-                is com.example.domain.DeleteMediaResult.Failure -> {
-                    clearSelection()
-                }
-            }
+            handleDeleteResult(result)
         }
     }
 
     fun confirmDeletedInDb() {
         viewModelScope.launch {
-            if (pendingDeleteIds.isNotEmpty()) {
-                val targetAssets = uiState.value.items.filter { pendingDeleteIds.contains(it.id) }
-                app.deleteMediaUseCase.onUserConsentResult(targetAssets, true)
-                pendingDeleteIds = emptyList()
-            }
-            clearSelection()
-            closeDetail()
-            _pendingDeleteRequest.value = null
+            val result = app.deleteMediaUseCase.onUserConsentResult(activeBatchAssets, remainingAssets, true)
+            handleDeleteResult(result)
         }
     }
 
     fun cancelDeleteRequest() {
         viewModelScope.launch {
-            if (pendingDeleteIds.isNotEmpty()) {
-                val targetAssets = uiState.value.items.filter { pendingDeleteIds.contains(it.id) }
-                app.deleteMediaUseCase.onUserConsentResult(targetAssets, false)
-                pendingDeleteIds = emptyList()
-            }
+            app.deleteMediaUseCase.onUserConsentResult(activeBatchAssets, remainingAssets, false)
+            activeBatchAssets = emptyList()
+            remainingAssets = emptyList()
             _pendingDeleteRequest.value = null
+        }
+    }
+
+    private fun handleDeleteResult(result: com.example.domain.DeleteMediaResult) {
+        when (result) {
+            is com.example.domain.DeleteMediaResult.NeedsUserConsent -> {
+                activeBatchAssets = result.activeBatchAssets
+                remainingAssets = result.remainingAssets
+                _pendingDeleteRequest.value = result.intentSenderRequest
+            }
+            is com.example.domain.DeleteMediaResult.Success -> {
+                activeBatchAssets = emptyList()
+                remainingAssets = emptyList()
+                _pendingDeleteRequest.value = null
+                clearSelection()
+                closeDetail()
+            }
+            is com.example.domain.DeleteMediaResult.Failure -> {
+                activeBatchAssets = emptyList()
+                remainingAssets = emptyList()
+                _pendingDeleteRequest.value = null
+                clearSelection()
+            }
         }
     }
 

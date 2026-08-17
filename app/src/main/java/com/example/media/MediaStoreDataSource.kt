@@ -15,24 +15,24 @@ import com.example.core.model.SystemMedia
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class MediaStoreDataSource(private val context: Context) {
+open class MediaStoreDataSource(private val context: Context) {
     private val contentResolver: ContentResolver = context.contentResolver
 
-    suspend fun queryAll(): List<SystemMedia> = withContext(Dispatchers.IO) {
+    open suspend fun queryAll(): List<SystemMedia> = withContext(Dispatchers.IO) {
         val result = mutableListOf<SystemMedia>()
         result.addAll(queryImages(since = 0L))
         result.addAll(queryVideos(since = 0L))
         result.sortedBy { it.dateAdded }
     }
 
-    suspend fun queryLatest(sinceAddedAt: Long): List<SystemMedia> = withContext(Dispatchers.IO) {
+    open suspend fun queryLatest(sinceAddedAt: Long): List<SystemMedia> = withContext(Dispatchers.IO) {
         val result = mutableListOf<SystemMedia>()
         result.addAll(queryImages(since = sinceAddedAt))
         result.addAll(queryVideos(since = sinceAddedAt))
         result.sortedBy { it.dateAdded }
     }
 
-    suspend fun queryByUri(uri: Uri): SystemMedia? = withContext(Dispatchers.IO) {
+    open suspend fun queryByUri(uri: Uri): SystemMedia? = withContext(Dispatchers.IO) {
         val id = runCatching { ContentUris.parseId(uri) }.getOrNull() ?: return@withContext null
         val isVideo = uri.toString().contains("video", ignoreCase = true)
         val targetTable = if (isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI

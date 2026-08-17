@@ -60,10 +60,15 @@ class MediaMonitorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        val app = applicationContext as LocalMediaApplication
+        if (!app.appSettingsRepository.getSnapshot().isServiceRunning) {
+            stopSelf()
+            return
+        }
+
         isRunning = true
         overlay = QuickClassifyOverlay(this)
 
-        val app = applicationContext as LocalMediaApplication
         startForeground(
             MediaNotificationManager.NOTIFICATION_ID_MONITOR,
             app.notificationManager.buildForegroundNotification()
@@ -92,7 +97,8 @@ class MediaMonitorService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
+        val app = applicationContext as? LocalMediaApplication
+        if (intent?.action == ACTION_STOP || (app != null && !app.appSettingsRepository.getSnapshot().isServiceRunning)) {
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY

@@ -43,6 +43,11 @@ class MediaJobService : JobService() {
 
             scheduler.schedule(builder.build())
         }
+
+        fun cancel(context: Context) {
+            val scheduler = context.getSystemService(Context.JOB_SCHEDULER_SERVICE) as? JobScheduler ?: return
+            scheduler.cancel(JOB_ID)
+        }
     }
 
     override fun onStartJob(params: JobParameters?): Boolean {

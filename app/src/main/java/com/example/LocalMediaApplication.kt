@@ -68,6 +68,8 @@ class LocalMediaApplication : Application() {
         private set
     lateinit var sessionDeliveryCoordinator: com.example.watcher.SessionDeliveryCoordinator
         private set
+    lateinit var monitoringController: com.example.watcher.MonitoringController
+        private set
 
     // Domain use cases
     lateinit var classifyMediaUseCase: com.example.domain.ClassifyMediaUseCase
@@ -124,6 +126,7 @@ class LocalMediaApplication : Application() {
             notificationManager,
             quickClassifyOverlay
         )
+        monitoringController = com.example.watcher.MonitoringController(this, appSettingsRepository)
 
         // Init use cases
         classifyMediaUseCase = com.example.domain.ClassifyMediaUseCase(
@@ -132,9 +135,11 @@ class LocalMediaApplication : Application() {
             policyEngine
         )
         classifySessionUseCase = com.example.domain.ClassifySessionUseCase(
+            database,
             mediaRepository,
             captureSessionRepository,
-            classifyMediaUseCase,
+            categoryRepository,
+            policyEngine,
             notificationManager
         )
         deleteMediaUseCase = com.example.domain.DeleteMediaUseCase(
@@ -143,8 +148,8 @@ class LocalMediaApplication : Application() {
             mediaStoreDataSource
         )
 
-        // Schedule JobService
-        MediaJobService.schedule(this)
+        // Apply monitoring state based on single source of truth (Settings + Permissions)
+        monitoringController.applyCurrentState()
 
         // Launch periodic retention scanning & initial reconcile
         appScope.launch {

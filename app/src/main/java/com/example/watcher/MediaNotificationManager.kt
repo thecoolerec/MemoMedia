@@ -9,8 +9,10 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.example.MainActivity
+import com.example.core.enum.NotificationMode
 import com.example.core.model.CaptureSession
 import com.example.core.model.Category
+import com.example.core.model.DeliveryResult
 
 class MediaNotificationManager(private val context: Context) {
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -78,48 +80,58 @@ class MediaNotificationManager(private val context: Context) {
         return if (hash == NOTIFICATION_ID_MONITOR) hash + 100 else hash
     }
 
-    fun showSessionReadyNotification(session: CaptureSession, categories: List<Category>) {
-        val appIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra("OPEN_TAB", "inbox")
-            putExtra("SESSION_ID", session.id)
-        }
-        val contentPendingIntent = PendingIntent.getActivity(
-            context,
-            session.id.toInt(),
-            appIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val sourceTitle = getSourceDisplayName(session.sourcePackage)
-        val title = "$sourceTitle · 发现 ${session.mediaCount} 项新媒体"
-        val builder = NotificationCompat.Builder(context, CHANNEL_ALERT)
-            .setContentTitle(title)
-            .setContentText("点击进入待整理，或直接点击下方按钮一键分类")
-            .setSmallIcon(android.R.drawable.ic_menu_camera)
-            .setContentIntent(contentPendingIntent)
-            .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-
-        // Add top 3 action buttons for one-tap classification
-        val topCategories = categories.take(3)
-        for (category in topCategories) {
-            val actionIntent = Intent(context, NotificationActionReceiver::class.java).apply {
-                action = NotificationActionReceiver.ACTION_CLASSIFY
-                putExtra(NotificationActionReceiver.EXTRA_SESSION_ID, session.id)
-                putExtra(NotificationActionReceiver.EXTRA_CATEGORY_ID, category.id)
-                putExtra(NotificationActionReceiver.EXTRA_CATEGORY_NAME, category.name)
+    fun showSessionReadyNotification(session: CaptureSession, categories: List<Category>): DeliveryResult {
+        return try {
+            val appIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra("OPEN_TAB", "inbox")
+                putExtra("SESSION_ID", session.id)
             }
-            val actionPendingIntent = PendingIntent.getBroadcast(
+            val contentPendingIntent = PendingIntent.getActivity(
                 context,
-                (session.id * 100 + category.id).toInt(),
-                actionIntent,
+                session.id.toInt(),
+                appIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            builder.addAction(0, category.name, actionPendingIntent)
-        }
 
-        notificationManager.notify(getSessionNotificationId(session.id), builder.build())
+            val sourceTitle = getSourceDisplayName(session.sourcePackage)
+            val title = "$sourceTitle · 发现 ${session.mediaCount} 项新媒体"
+            val builder = NotificationCompat.Builder(context, CHANNEL_ALERT)
+                .setContentTitle(title)
+                .setContentText("点击进入待整理，或直接点击下方按钮一键分类")
+                .setSmallIcon(android.R.drawable.ic_menu_camera)
+                .setContentIntent(contentPendingIntent)
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+
+            // Add top 3 action buttons for one-tap classification
+            val topCategories = categories.take(3)
+            for (category in topCategories) {
+                val actionIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+                    action = NotificationActionReceiver.ACTION_CLASSIFY
+                    putExtra(NotificationActionReceiver.EXTRA_SESSION_ID, session.id)
+                    putExtra(NotificationActionReceiver.EXTRA_CATEGORY_ID, category.id)
+                    putExtra(NotificationActionReceiver.EXTRA_CATEGORY_NAME, category.name)
+                }
+                val actionPendingIntent = PendingIntent.getBroadcast(
+                    context,
+                    (session.id * 100 + category.id).toInt(),
+                    actionIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                builder.addAction(0, category.name, actionPendingIntent)
+            }
+
+            notificationManager.notify(getSessionNotificationId(session.id), builder.build())
+            DeliveryResult.Success(NotificationMode.NOTIFICATION)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            DeliveryResult.Failure(
+                mode = NotificationMode.NOTIFICATION,
+                reason = "NotificationManager notify failed: ${e.message}",
+                throwable = e
+            )
+        }
     }
 
     fun cancelSessionNotification(sessionId: Long) {
