@@ -23,14 +23,14 @@ class SessionDeliveryCoordinator(
     private val notificationManager: MediaNotificationManager,
     private val overlay: QuickClassifyOverlay
 ) {
-    suspend fun deliverSession(session: CaptureSession): DeliveryResult = withContext(Dispatchers.Main) {
+    suspend fun deliverSession(session: CaptureSession): DeliveryResult {
         val categories = withContext(Dispatchers.IO) { categoryRepository.getAll() }
         val items = withContext(Dispatchers.IO) { mediaRepository.getBySession(session.id) }
         val settings = withContext(Dispatchers.IO) { settingsRepository.getSnapshot() }
 
         val targetMode = session.notificationMode ?: settings.defaultNotificationMode
 
-        when (targetMode) {
+        return when (targetMode) {
             NotificationMode.SILENT -> {
                 withContext(Dispatchers.IO) {
                     sessionRepository.updateDeliveryStatus(session.id, DeliveryStatus.DELIVERED_SILENT.name)
@@ -54,7 +54,9 @@ class SessionDeliveryCoordinator(
                 }
 
                 if (settings.overlayEnabled && hasOverlayPermission) {
-                    val overlayResult = overlay.show(session, items, categories)
+                    val overlayResult = withContext(Dispatchers.Main) {
+                        overlay.show(session, items, categories)
+                    }
                     if (overlayResult is DeliveryResult.Success) {
                         withContext(Dispatchers.IO) {
                             sessionRepository.updateDeliveryStatus(session.id, DeliveryStatus.DELIVERED_OVERLAY.name)
