@@ -19,7 +19,7 @@ sealed class Destination(
 ) {
     data object Photos : Destination(
         route = "photos",
-        title = "图库",
+        title = "照片",
         selectedIcon = Icons.Filled.PhotoLibrary,
         unselectedIcon = Icons.Outlined.PhotoLibrary
     )

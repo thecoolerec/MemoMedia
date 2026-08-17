@@ -27,7 +27,9 @@ data class PhotosUiState(
     val selectedAssetForDetail: MediaAsset? = null,
     val selectedAssetTags: List<Tag> = emptyList(),
     val isRefreshing: Boolean = false,
-    val pendingDeleteRequest: IntentSenderRequest? = null
+    val pendingDeleteRequest: IntentSenderRequest? = null,
+    val isSearchActive: Boolean = false,
+    val searchQuery: String = ""
 )
 
 class PhotosViewModel(application: Application) : AndroidViewModel(application) {
@@ -43,6 +45,8 @@ class PhotosViewModel(application: Application) : AndroidViewModel(application) 
     private val _selectedAssetTags = MutableStateFlow<List<Tag>>(emptyList())
     private val _isRefreshing = MutableStateFlow(false)
     private val _pendingDeleteRequest = MutableStateFlow<IntentSenderRequest?>(null)
+    private val _isSearchActive = MutableStateFlow(false)
+    private val _searchQuery = MutableStateFlow("")
     private var activeBatchAssets = listOf<MediaAsset>()
     private var remainingAssets = listOf<MediaAsset>()
 
@@ -55,7 +59,9 @@ class PhotosViewModel(application: Application) : AndroidViewModel(application) 
         _selectedAssetForDetail,
         _selectedAssetTags,
         _isRefreshing,
-        _pendingDeleteRequest
+        _pendingDeleteRequest,
+        _isSearchActive,
+        _searchQuery
     ) { params ->
         @Suppress("UNCHECKED_CAST")
         val items = params[0] as List<MediaAsset>
@@ -70,11 +76,22 @@ class PhotosViewModel(application: Application) : AndroidViewModel(application) 
         val detailTags = params[6] as List<Tag>
         val isRefreshing = params[7] as Boolean
         val deleteReq = params[8] as? IntentSenderRequest
+        val isSearchActive = params[9] as Boolean
+        val searchQuery = params[10] as String
 
-        val filtered = when (categoryId) {
+        var filtered = when (categoryId) {
             null -> items // All
             -1L -> items.filter { it.status == MediaStatus.PENDING } // 待整理
             else -> items.filter { it.primaryCategoryId == categoryId }
+        }
+
+        if (isSearchActive && searchQuery.isNotBlank()) {
+            val q = searchQuery.trim()
+            filtered = filtered.filter { asset ->
+                (asset.displayName?.contains(q, ignoreCase = true) == true) ||
+                        (asset.bucketName?.contains(q, ignoreCase = true) == true) ||
+                        (asset.ownerPackage?.contains(q, ignoreCase = true) == true)
+            }
         }
 
         PhotosUiState(
@@ -87,13 +104,26 @@ class PhotosViewModel(application: Application) : AndroidViewModel(application) 
             selectedAssetForDetail = detailAsset,
             selectedAssetTags = detailTags,
             isRefreshing = isRefreshing,
-            pendingDeleteRequest = deleteReq
+            pendingDeleteRequest = deleteReq,
+            isSearchActive = isSearchActive,
+            searchQuery = searchQuery
         )
     }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
         PhotosUiState()
     )
+
+    fun setSearchActive(active: Boolean) {
+        _isSearchActive.value = active
+        if (!active) {
+            _searchQuery.value = ""
+        }
+    }
+
+    fun setSearchQuery(query: String) {
+        _searchQuery.value = query
+    }
 
     fun selectCategoryFilter(categoryId: Long?) {
         _selectedCategoryId.value = categoryId

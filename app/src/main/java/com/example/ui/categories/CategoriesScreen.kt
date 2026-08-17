@@ -1,5 +1,6 @@
 package com.example.ui.categories
 
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,6 +17,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,11 +29,14 @@ import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Rule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -39,9 +47,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SecondaryTabRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -55,13 +64,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.example.core.enum.NotificationMode
 import com.example.core.model.Category
 import com.example.core.model.SourceRule
-import java.util.Locale
+import com.example.ui.components.getCategoryColor
+import com.example.ui.components.getCategoryIcon
+import com.example.ui.util.formatFileSize
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,30 +93,29 @@ fun CategoriesScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "分类与规则管理",
-                        style = MaterialTheme.typography.titleLarge
+                        text = "分类",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
                     )
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    if (selectedTabIndex == 0) {
-                        viewModel.openCreateCategoryDialog()
-                    } else {
-                        viewModel.openCreateRuleDialog()
+                actions = {
+                    IconButton(
+                        onClick = {
+                            if (selectedTabIndex == 0) {
+                                viewModel.openCreateCategoryDialog()
+                            } else {
+                                viewModel.openCreateRuleDialog()
+                            }
+                        },
+                        modifier = Modifier.testTag("btn_add_category_or_rule")
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "新建")
                     }
                 },
-                modifier = Modifier.testTag("add_category_or_rule_fab"),
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "添加")
-            }
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
+            )
         },
         modifier = modifier
     ) { paddingValues ->
@@ -109,26 +124,24 @@ fun CategoriesScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            TabRow(
+            SecondaryTabRow(
                 selectedTabIndex = selectedTabIndex,
                 containerColor = MaterialTheme.colorScheme.surface
             ) {
                 Tab(
                     selected = selectedTabIndex == 0,
                     onClick = { selectedTabIndex = 0 },
-                    text = { Text("分类列表 (${state.categoryStats.size})") },
-                    icon = { Icon(Icons.Default.Category, contentDescription = null) }
+                    text = { Text("分类相册 (${state.categoryStats.size})") }
                 )
                 Tab(
                     selected = selectedTabIndex == 1,
                     onClick = { selectedTabIndex = 1 },
-                    text = { Text("分流规则 (${state.sourceRules.size})") },
-                    icon = { Icon(Icons.Default.Rule, contentDescription = null) }
+                    text = { Text("分流规则 (${state.sourceRules.size})") }
                 )
             }
 
             if (selectedTabIndex == 0) {
-                CategoriesListTab(
+                CategoryGridTab(
                     categoryStats = state.categoryStats,
                     onEdit = { viewModel.openEditCategoryDialog(it) },
                     onDelete = { viewModel.deleteCategory(it.id) }
@@ -176,117 +189,242 @@ fun CategoriesScreen(
 }
 
 @Composable
-private fun CategoriesListTab(
+private fun CategoryGridTab(
     categoryStats: List<CategoryWithStats>,
     onEdit: (Category) -> Unit,
     onDelete: (Category) -> Unit
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("categories_grid"),
         contentPadding = PaddingValues(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(categoryStats, key = { it.category.id }) { item ->
-            CategoryCard(
+        items(
+            items = categoryStats,
+            key = { it.category.id }
+        ) { item ->
+            CategoryCard2Column(
                 item = item,
                 onEdit = { onEdit(item.category) },
                 onDelete = { onDelete(item.category) }
             )
         }
-        item {
-            Spacer(modifier = Modifier.height(72.dp))
-        }
     }
 }
 
 @Composable
-private fun CategoryCard(
+private fun CategoryCard2Column(
     item: CategoryWithStats,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     val category = item.category
+    val catColor = getCategoryColor(category.name)
+    var showMenu by remember { mutableStateOf(false) }
+
     Card(
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("category_item_${category.id}")
+            .clickable(onClick = onEdit)
+            .testTag("category_card_${category.id}")
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Album 2x2 Collage Preview or Hero Cover
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
+                    .fillMaxWidth()
+                    .aspectRatio(1.2f)
+                    .background(catColor.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = category.icon?.ifBlank { "📁" } ?: "📁",
-                    style = MaterialTheme.typography.titleMedium
-                )
+                if (item.previewMedia.isNotEmpty()) {
+                    // Render 2x2 collage preview
+                    val previews = item.previewMedia.take(4)
+                    if (previews.size == 1) {
+                        AsyncImage(
+                            model = Uri.parse(previews[0].contentUri),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                                AsyncImage(
+                                    model = Uri.parse(previews[0].contentUri),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.weight(1f).fillMaxSize()
+                                )
+                                if (previews.size > 1) {
+                                    Spacer(modifier = Modifier.width(1.dp))
+                                    AsyncImage(
+                                        model = Uri.parse(previews[1].contentUri),
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.weight(1f).fillMaxSize()
+                                    )
+                                }
+                            }
+                            if (previews.size > 2) {
+                                Spacer(modifier = Modifier.height(1.dp))
+                                Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                                    AsyncImage(
+                                        model = Uri.parse(previews[2].contentUri),
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.weight(1f).fillMaxSize()
+                                    )
+                                    Spacer(modifier = Modifier.width(1.dp))
+                                    if (previews.size > 3) {
+                                        AsyncImage(
+                                            model = Uri.parse(previews[3].contentUri),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.weight(1f).fillMaxSize()
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .fillMaxSize()
+                                                .background(catColor.copy(alpha = 0.2f))
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Icon(
+                        imageVector = getCategoryIcon(category.icon),
+                        contentDescription = null,
+                        tint = catColor,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+
+                // Category Icon Badge top right
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = getCategoryIcon(category.icon),
+                            contentDescription = null,
+                            tint = catColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            // Info Section
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
                         text = category.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f)
                     )
-                    if (category.isSystem) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(MaterialTheme.colorScheme.secondaryContainer)
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
+
+                    Box {
+                        IconButton(
+                            onClick = { showMenu = true },
+                            modifier = Modifier.size(24.dp)
                         ) {
-                            Text(
-                                text = "系统默认",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "更多",
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                        }
+
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("编辑分类") },
+                                onClick = {
+                                    showMenu = false
+                                    onEdit()
+                                },
+                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+                            )
+                            if (!category.isSystem) {
+                                DropdownMenuItem(
+                                    text = { Text("删除分类", color = MaterialTheme.colorScheme.error) },
+                                    onClick = {
+                                        showMenu = false
+                                        onDelete()
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                )
+                            }
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "${item.mediaCount} 项 · ${formatFileSize(item.totalSizeBytes)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp
+                )
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Retention Badge
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = if (category.retentionDays != null)
+                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f)
+                    else
+                        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
                 ) {
                     Text(
-                        text = "${item.mediaCount} 项 (${formatSize(item.totalSizeBytes)})",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
                         text = if (category.retentionDays != null) "保留 ${category.retentionDays} 天" else "永久保留",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (category.retentionDays != null) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-
-            IconButton(onClick = onEdit) {
-                Icon(Icons.Default.Edit, contentDescription = "编辑分类")
-            }
-
-            if (!category.isSystem) {
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "删除分类",
-                        tint = MaterialTheme.colorScheme.error
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = if (category.retentionDays != null)
+                            MaterialTheme.colorScheme.onTertiaryContainer
+                        else
+                            MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
             }
@@ -339,7 +477,7 @@ private fun RulesListTab(
                 val targetCat = categories.find { it.id == rule.targetCategoryId }
                 Card(
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -351,25 +489,26 @@ private fun RulesListTab(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = rule.name,
-                                style = MaterialTheme.typography.titleMedium
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             if (!rule.sourcePackage.isNullOrBlank()) {
                                 Text(
-                                    text = "来源应用: ${rule.sourcePackage}",
+                                    text = "来源: ${rule.sourcePackage}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             if (!rule.relativePathPattern.isNullOrBlank()) {
                                 Text(
-                                    text = "路径匹配: ${rule.relativePathPattern}",
+                                    text = "路径: ${rule.relativePathPattern}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Text(
-                                text = "目标分类: ${targetCat?.name ?: "未设置"} | 通知: ${rule.notificationMode?.name ?: "默认"}",
+                                text = "目标分类: ${targetCat?.name ?: "未设置"}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -389,9 +528,6 @@ private fun RulesListTab(
                         }
                     }
                 }
-            }
-            item {
-                Spacer(modifier = Modifier.height(72.dp))
             }
         }
     }
@@ -490,7 +626,7 @@ private fun CategoryEditorDialog(
                     OutlinedTextField(
                         value = retentionDaysText,
                         onValueChange = { retentionDaysText = it.filter { ch -> ch.isDigit() } },
-                        label = { Text("保留天数 (过期自动进入回收建议)") },
+                        label = { Text("保留天数 (过期自动进入清理建议)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -636,17 +772,4 @@ private fun RuleEditorDialog(
             }
         }
     )
-}
-
-private fun formatSize(bytes: Long): String {
-    if (bytes <= 0) return "0 B"
-    val kb = bytes / 1024.0
-    val mb = kb / 1024.0
-    val gb = mb / 1024.0
-    return when {
-        gb >= 1.0 -> String.format(Locale.getDefault(), "%.1f GB", gb)
-        mb >= 1.0 -> String.format(Locale.getDefault(), "%.1f MB", mb)
-        kb >= 1.0 -> String.format(Locale.getDefault(), "%.1f KB", kb)
-        else -> "$bytes B"
-    }
 }

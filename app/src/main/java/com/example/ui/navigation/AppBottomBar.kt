@@ -34,7 +34,7 @@ fun AppBottomBar(
             .windowInsetsPadding(WindowInsets.navigationBars)
             .testTag("app_bottom_bar"),
         containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 6.dp
+        tonalElevation = 2.dp
     ) {
         Destination.items.forEach { item ->
             val isSelected = currentRoute == item.route
@@ -66,10 +66,8 @@ fun AppBottomBar(
                         BadgedBox(
                             badge = {
                                 Badge(
-                                    containerColor = if (item is Destination.Inbox)
-                                        MaterialTheme.colorScheme.primary
-                                    else
-                                        MaterialTheme.colorScheme.error
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = MaterialTheme.colorScheme.onError
                                 ) {
                                     Text(badgeText)
                                 }
@@ -94,9 +92,9 @@ fun AppBottomBar(
                     )
                 },
                 colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
                     unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                 )

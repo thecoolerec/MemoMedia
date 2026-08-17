@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.LocalMediaApplication
 import com.example.core.enum.NotificationMode
 import com.example.core.model.Category
+import com.example.core.model.MediaAsset
 import com.example.core.model.SourceRule
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -17,7 +18,8 @@ import kotlinx.coroutines.launch
 data class CategoryWithStats(
     val category: Category,
     val mediaCount: Int,
-    val totalSizeBytes: Long
+    val totalSizeBytes: Long,
+    val previewMedia: List<MediaAsset> = emptyList()
 )
 
 data class CategoriesUiState(
@@ -52,7 +54,8 @@ class CategoriesViewModel(application: Application) : AndroidViewModel(applicati
             CategoryWithStats(
                 category = cat,
                 mediaCount = items.size,
-                totalSizeBytes = totalSize
+                totalSizeBytes = totalSize,
+                previewMedia = items.take(4)
             )
         }
         Pair(stats, rules)

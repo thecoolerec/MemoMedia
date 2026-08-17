@@ -15,21 +15,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.core.enum.MediaStatus
@@ -49,7 +46,7 @@ fun MediaThumbnail(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val shape = RoundedCornerShape(8.dp)
+    val shape = RoundedCornerShape(4.dp)
 
     Box(
         modifier = modifier
@@ -57,7 +54,7 @@ fun MediaThumbnail(
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .then(
-                if (isSelected) Modifier.border(2.5.dp, MaterialTheme.colorScheme.primary, shape)
+                if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape)
                 else Modifier
             )
             .combinedClickable(
@@ -76,25 +73,13 @@ fun MediaThumbnail(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Gradient overlay at bottom for readable badges
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f)),
-                        startY = 100f
-                    )
-                )
-        )
-
-        // Video Indicator
+        // Video Indicator in corner
         if (asset.mediaType == MediaType.VIDEO) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(6.dp)
-                    .background(Color.Black.copy(alpha = 0.65f), CircleShape)
+                    .align(Alignment.BottomEnd)
+                    .padding(4.dp)
+                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
                     .size(20.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -107,35 +92,34 @@ fun MediaThumbnail(
             }
         }
 
-        // Category Tag Badge
-        val badgeName = when {
-            asset.status == MediaStatus.PENDING -> "待整理"
-            asset.status == MediaStatus.EXPIRED -> "已过期"
-            category != null -> category.name
-            else -> null
-        }
-
-        if (badgeName != null) {
-            val badgeColor = when {
-                asset.status == MediaStatus.PENDING -> Color(0xFF475569)
-                asset.status == MediaStatus.EXPIRED -> Color(0xFFDC2626)
-                category != null -> getCategoryColor(category.name)
-                else -> Color.Black
-            }
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(4.dp)
-                    .background(badgeColor.copy(alpha = 0.85f), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
-            ) {
-                Text(
-                    text = badgeName,
-                    color = Color.White,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.SemiBold
+        // Status indicators (subtle dot for pending, timer icon for expired)
+        if (!isSelectionMode) {
+            if (asset.status == MediaStatus.PENDING) {
+                // Subtle pending dot in top-right
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(5.dp)
+                        .size(7.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
                 )
+            } else if (asset.status == MediaStatus.EXPIRED) {
+                // Expired warning icon in top-right
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .size(18.dp)
+                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.85f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Timer,
+                        contentDescription = "已过期",
+                        tint = Color.White,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
             }
         }
 
@@ -144,10 +128,10 @@ fun MediaThumbnail(
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(6.dp)
-                    .size(22.dp)
+                    .padding(5.dp)
+                    .size(20.dp)
                     .background(
-                        if (isSelected) MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = 0.4f),
+                        if (isSelected) MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = 0.35f),
                         CircleShape
                     )
                     .border(1.5.dp, Color.White, CircleShape),
@@ -158,7 +142,7 @@ fun MediaThumbnail(
                         imageVector = Icons.Default.Check,
                         contentDescription = "已选择",
                         tint = Color.White,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(13.dp)
                     )
                 }
             }
