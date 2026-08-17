@@ -154,20 +154,26 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun requestDeleteExpiredMedia(items: List<MediaAsset>) {
-        val uris = items.map { it.contentUri }
-        val deleteRequest = MediaDeletionHelper.createDeleteRequestOrDeleteDirectly(getApplication(), uris)
-        if (deleteRequest != null) {
-            _pendingDeleteRequest.value = deleteRequest
-        } else {
-            // Deleted directly on pre-R
-            confirmDeletedInDb(items)
+        viewModelScope.launch {
+            val result = app.deleteMediaUseCase.execute(items)
+            when (result) {
+                is com.example.domain.DeleteMediaResult.NeedsUserConsent -> {
+                    _pendingDeleteRequest.value = result.intentSenderRequest
+                }
+                is com.example.domain.DeleteMediaResult.Success -> {
+                    _expiredItems.value = emptyList()
+                    _showExpiredDialog.value = false
+                }
+                is com.example.domain.DeleteMediaResult.Failure -> {
+                    // Handled
+                }
+            }
         }
     }
 
     fun confirmDeletedInDb(items: List<MediaAsset> = _expiredItems.value) {
         viewModelScope.launch {
-            val ids = items.map { it.id }
-            mediaRepository.markDeleted(ids)
+            app.deleteMediaUseCase.onUserConsentResult(items, true)
             _expiredItems.value = emptyList()
             _showExpiredDialog.value = false
             _pendingDeleteRequest.value = null
@@ -175,6 +181,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun cancelDeleteRequest() {
-        _pendingDeleteRequest.value = null
+        viewModelScope.launch {
+            app.deleteMediaUseCase.onUserConsentResult(_expiredItems.value, false)
+            _pendingDeleteRequest.value = null
+        }
     }
 }

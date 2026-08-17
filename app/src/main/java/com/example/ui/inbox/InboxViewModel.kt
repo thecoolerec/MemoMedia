@@ -73,20 +73,13 @@ class InboxViewModel(application: Application) : AndroidViewModel(application) {
 
     fun classifySession(sessionId: Long, category: Category) {
         viewModelScope.launch {
-            val expireAt = app.policyEngine.calculateExpireAt(System.currentTimeMillis(), category)
-            mediaRepository.assignSessionCategory(sessionId, category.id, expireAt)
-            sessionRepository.updateStatus(sessionId, SessionStatus.CLASSIFIED.name)
+            app.classifySessionUseCase(sessionId, category.id)
         }
     }
 
     fun classifySingleMedia(mediaId: Long, category: Category) {
         viewModelScope.launch {
-            val asset = mediaRepository.getById(mediaId)
-            val expireAt = app.policyEngine.calculateExpireAt(
-                asset?.capturedAt ?: System.currentTimeMillis(),
-                category
-            )
-            mediaRepository.assignCategory(mediaId, category.id, expireAt)
+            app.classifyMediaUseCase(mediaId, category.id)
         }
     }
 

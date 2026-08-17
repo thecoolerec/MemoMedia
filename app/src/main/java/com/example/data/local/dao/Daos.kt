@@ -23,6 +23,9 @@ interface MediaAssetDao {
     @Query("SELECT * FROM media_asset WHERE status = 'PENDING' ORDER BY added_at DESC")
     fun observePending(): Flow<List<MediaAssetEntity>>
 
+    @Query("SELECT * FROM media_asset WHERE primary_category_id IS NULL AND status != 'DELETED' ORDER BY captured_at DESC, added_at DESC")
+    fun observeUnclassified(): Flow<List<MediaAssetEntity>>
+
     @Query("SELECT * FROM media_asset WHERE primary_category_id = :categoryId AND status != 'DELETED' ORDER BY captured_at DESC, added_at DESC")
     fun observeByCategory(categoryId: Long): Flow<List<MediaAssetEntity>>
 
@@ -83,6 +86,9 @@ interface MediaAssetDao {
     @Query("SELECT COUNT(*) FROM media_asset WHERE status = 'PENDING'")
     fun observePendingCount(): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM media_asset WHERE primary_category_id IS NULL AND status != 'DELETED'")
+    fun observeUnclassifiedCount(): Flow<Int>
+
     @Query("SELECT COUNT(*) FROM media_asset WHERE primary_category_id = :categoryId AND status != 'DELETED'")
     fun observeCountByCategory(categoryId: Long): Flow<Int>
 
@@ -104,7 +110,10 @@ interface CategoryDao {
     @Query("SELECT * FROM category WHERE name = :name LIMIT 1")
     suspend fun getByName(name: String): CategoryEntity?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Query("SELECT * FROM category WHERE system_key = :systemKey LIMIT 1")
+    suspend fun getBySystemKey(systemKey: String): CategoryEntity?
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(category: CategoryEntity): Long
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
@@ -118,6 +127,19 @@ interface CategoryDao {
 
     @Query("DELETE FROM category WHERE id = :id AND is_system = 0")
     suspend fun deleteById(id: Long)
+
+    @Query("UPDATE media_asset SET primary_category_id = NULL, status = 'UNCLASSIFIED' WHERE primary_category_id = :categoryId")
+    suspend fun nullifyMediaCategory(categoryId: Long)
+
+    @Query("UPDATE source_rule SET target_category_id = NULL WHERE target_category_id = :categoryId")
+    suspend fun nullifySourceRuleCategory(categoryId: Long)
+
+    @Transaction
+    suspend fun deleteCategoryAndUnlink(id: Long) {
+        nullifyMediaCategory(id)
+        nullifySourceRuleCategory(id)
+        deleteById(id)
+    }
 }
 
 @Dao

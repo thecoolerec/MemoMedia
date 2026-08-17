@@ -64,6 +64,18 @@ class LocalMediaApplication : Application() {
         private set
     lateinit var notificationManager: MediaNotificationManager
         private set
+    lateinit var quickClassifyOverlay: com.example.watcher.QuickClassifyOverlay
+        private set
+    lateinit var sessionDeliveryCoordinator: com.example.watcher.SessionDeliveryCoordinator
+        private set
+
+    // Domain use cases
+    lateinit var classifyMediaUseCase: com.example.domain.ClassifyMediaUseCase
+        private set
+    lateinit var classifySessionUseCase: com.example.domain.ClassifySessionUseCase
+        private set
+    lateinit var deleteMediaUseCase: com.example.domain.DeleteMediaUseCase
+        private set
 
     override fun onCreate() {
         super.onCreate()
@@ -81,7 +93,7 @@ class LocalMediaApplication : Application() {
         mediaStoreDataSource = MediaStoreDataSource(this)
 
         // Init policy engines
-        ruleEngine = DefaultSourceRuleEngine(sourceRuleRepository)
+        ruleEngine = DefaultSourceRuleEngine(sourceRuleRepository, categoryRepository)
         policyEngine = DefaultCategoryPolicyEngine()
         retentionScanner = RetentionScanner(mediaRepository, categoryRepository)
 
@@ -102,6 +114,34 @@ class LocalMediaApplication : Application() {
             captureSessionAggregator
         )
         notificationManager = MediaNotificationManager(this)
+        quickClassifyOverlay = com.example.watcher.QuickClassifyOverlay(this)
+        sessionDeliveryCoordinator = com.example.watcher.SessionDeliveryCoordinator(
+            this,
+            captureSessionRepository,
+            categoryRepository,
+            mediaRepository,
+            appSettingsRepository,
+            notificationManager,
+            quickClassifyOverlay
+        )
+
+        // Init use cases
+        classifyMediaUseCase = com.example.domain.ClassifyMediaUseCase(
+            mediaRepository,
+            categoryRepository,
+            policyEngine
+        )
+        classifySessionUseCase = com.example.domain.ClassifySessionUseCase(
+            mediaRepository,
+            captureSessionRepository,
+            classifyMediaUseCase,
+            notificationManager
+        )
+        deleteMediaUseCase = com.example.domain.DeleteMediaUseCase(
+            this,
+            mediaRepository,
+            mediaStoreDataSource
+        )
 
         // Schedule JobService
         MediaJobService.schedule(this)

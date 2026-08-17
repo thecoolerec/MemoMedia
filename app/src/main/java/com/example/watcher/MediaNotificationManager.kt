@@ -73,6 +73,11 @@ class MediaNotificationManager(private val context: Context) {
             .build()
     }
 
+    fun getSessionNotificationId(sessionId: Long): Int {
+        val hash = (sessionId xor (sessionId ushr 32)).toInt()
+        return if (hash == NOTIFICATION_ID_MONITOR) hash + 100 else hash
+    }
+
     fun showSessionReadyNotification(session: CaptureSession, categories: List<Category>) {
         val appIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -114,7 +119,11 @@ class MediaNotificationManager(private val context: Context) {
             builder.addAction(0, category.name, actionPendingIntent)
         }
 
-        notificationManager.notify(NOTIFICATION_ID_ALERT, builder.build())
+        notificationManager.notify(getSessionNotificationId(session.id), builder.build())
+    }
+
+    fun cancelSessionNotification(sessionId: Long) {
+        notificationManager.cancel(getSessionNotificationId(sessionId))
     }
 
     fun cancelAlertNotification() {

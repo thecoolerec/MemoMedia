@@ -1,6 +1,7 @@
 package com.example.watcher
 
 import com.example.core.enum.MediaStatus
+import com.example.core.enum.ReconcileMode
 import com.example.core.model.MediaAsset
 import com.example.data.repository.CategoryRepository
 import com.example.data.repository.MediaRepository
@@ -24,26 +25,47 @@ class MediaReconciler(
 ) {
     private val mutex = Mutex()
 
-    suspend fun reconcile(forceFullScan: Boolean = false): Int = mutex.withLock {
+    suspend fun reconcile(forceFullScan: Boolean): Int {
+        val mode = if (forceFullScan) ReconcileMode.FULL_REPAIR else ReconcileMode.LIVE_INCREMENTAL
+        return reconcile(mode)
+    }
+
+    suspend fun reconcile(mode: ReconcileMode = ReconcileMode.LIVE_INCREMENTAL): Int = mutex.withLock {
         withContext(Dispatchers.IO) {
-            val maxKnownAddedAt = if (forceFullScan) 0L else mediaRepository.getMaxAddedAt()
-            val systemMediaList = if (maxKnownAddedAt > 0L) {
-                // Query only media added after the latest known addedAt (minus 5s cushion for clock skew)
-                mediaStoreDataSource.queryLatest((maxKnownAddedAt / 1000L) - 5L)
+            val maxKnownAddedAt = mediaRepository.getMaxAddedAt()
+            val isInitial = maxKnownAddedAt == 0L
+
+            val effectiveMode = if (isInitial && mode == ReconcileMode.LIVE_INCREMENTAL) {
+                ReconcileMode.INITIAL_BACKFILL
             } else {
-                mediaStoreDataSource.queryAll()
+                mode
+            }
+
+            val systemMediaList = when (effectiveMode) {
+                ReconcileMode.INITIAL_BACKFILL, ReconcileMode.FULL_REPAIR -> {
+                    mediaStoreDataSource.queryAll()
+                }
+                ReconcileMode.LIVE_INCREMENTAL, ReconcileMode.BOOT_CATCHUP -> {
+                    if (maxKnownAddedAt > 0L) {
+                        // Query media added after max known addedAt (minus 5s cushion for clock skew)
+                        mediaStoreDataSource.queryLatest((maxKnownAddedAt / 1000L) - 5L)
+                    } else {
+                        mediaStoreDataSource.queryAll()
+                    }
+                }
             }
 
             var newlyImportedCount = 0
             val categoriesMap = categoryRepository.getAll().associateBy { it.id }
             val activeRules = sourceRuleRepository.getActiveRules()
+            val now = System.currentTimeMillis()
+            val bootCatchupHorizonMs = now - (10 * 60 * 1000L) // 10 minutes
 
             for (sysMedia in systemMediaList) {
                 if (mediaRepository.exists(sysMedia.contentUri)) {
                     continue
                 }
 
-                val now = System.currentTimeMillis()
                 var asset = MediaAsset(
                     mediaStoreId = sysMedia.mediaStoreId,
                     contentUri = sysMedia.contentUri,
@@ -58,16 +80,16 @@ class MediaReconciler(
                     sizeBytes = sysMedia.sizeBytes,
                     capturedAt = sysMedia.dateTaken,
                     addedAt = sysMedia.dateAdded,
-                    status = MediaStatus.PENDING,
+                    status = MediaStatus.UNCLASSIFIED,
                     createdAt = now,
                     updatedAt = now
                 )
 
                 // Evaluate rule with snapshot to avoid N+1 queries
-                val ruleResult = ruleEngine.evaluateWithSnapshot(asset, activeRules, categoriesMap)
+                val routingDecision = ruleEngine.evaluateWithSnapshot(asset, activeRules, categoriesMap)
 
-                if (ruleResult.autoClassify && ruleResult.categoryId != null) {
-                    val targetCategory = categoriesMap[ruleResult.categoryId]
+                if (routingDecision.autoClassify && routingDecision.categoryId != null) {
+                    val targetCategory = categoriesMap[routingDecision.categoryId]
                     if (targetCategory != null) {
                         val expireAt = policyEngine.calculateExpireAt(
                             asset.capturedAt ?: asset.addedAt,
@@ -81,15 +103,24 @@ class MediaReconciler(
                     }
                     mediaRepository.insert(asset)
                 } else {
-                    if (forceFullScan) {
-                        // Historical scan: do not aggregate into active CaptureSession
-                        mediaRepository.insert(asset)
-                    } else {
-                        // Live import: Aggregate into capture session
-                        val sessionId = aggregator.aggregate(asset)
+                    val shouldCreateSession = when (effectiveMode) {
+                        ReconcileMode.INITIAL_BACKFILL, ReconcileMode.FULL_REPAIR -> false
+                        ReconcileMode.LIVE_INCREMENTAL -> true
+                        ReconcileMode.BOOT_CATCHUP -> asset.addedAt >= bootCatchupHorizonMs
+                    }
+
+                    if (shouldCreateSession) {
+                        val sessionId = aggregator.aggregate(asset, routingDecision.notificationMode)
                         asset = asset.copy(
                             captureSessionId = sessionId,
                             status = MediaStatus.PENDING
+                        )
+                        mediaRepository.insert(asset)
+                    } else {
+                        // Historical backfill or old boot catchup: import as UNCLASSIFIED without session
+                        asset = asset.copy(
+                            captureSessionId = null,
+                            status = MediaStatus.UNCLASSIFIED
                         )
                         mediaRepository.insert(asset)
                     }
@@ -97,13 +128,12 @@ class MediaReconciler(
                 newlyImportedCount++
             }
 
-            // If full scan requested, check for missing/deleted files
-            if (forceFullScan) {
+            // If full scan or repair requested, check for missing/deleted files
+            if (effectiveMode == ReconcileMode.FULL_REPAIR) {
                 val knownUris = mediaRepository.getAllKnownContentUris()
                 val currentSystemUris = systemMediaList.map { it.contentUri }.toSet()
                 val missingUris = knownUris.filter { !currentSystemUris.contains(it) }
                 if (missingUris.isNotEmpty()) {
-                    // Check individual existence before marking deleted
                     val reallyDeletedIds = mutableListOf<Long>()
                     for (uri in missingUris) {
                         val asset = mediaRepository.getByContentUri(uri)

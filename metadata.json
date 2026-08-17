@@ -1,5 +1,5 @@
 {
-  "name": "Local Media Organizer",
+  "name": "媒体整理",
   "description": "Local-First Android 图片与视频整理器，支持 CaptureSession 实时聚合、自动分类规则、生命周期留存与清理中心。",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

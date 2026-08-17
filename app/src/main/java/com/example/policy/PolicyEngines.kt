@@ -3,76 +3,91 @@ package com.example.policy
 import com.example.core.enum.NotificationMode
 import com.example.core.model.Category
 import com.example.core.model.MediaAsset
+import com.example.core.model.MediaRoutingDecision
 import com.example.core.model.SourceRule
+import com.example.data.repository.CategoryRepository
 import com.example.data.repository.SourceRuleRepository
 
-data class SourceRuleResult(
-    val matchedRule: SourceRule? = null,
-    val categoryId: Long? = null,
-    val notificationMode: NotificationMode = NotificationMode.OVERLAY,
-    val autoClassify: Boolean = false
-)
+fun sqlLikePatternToRegex(pattern: String): Regex {
+    val sb = StringBuilder()
+    for (ch in pattern) {
+        when (ch) {
+            '%' -> sb.append(".*")
+            '_' -> sb.append(".")
+            '\\', '.', '^', '$', '(', ')', '[', ']', '{', '}', '+', '*', '?', '|' -> {
+                sb.append('\\').append(ch)
+            }
+            else -> sb.append(ch)
+        }
+    }
+    return Regex(sb.toString(), RegexOption.IGNORE_CASE)
+}
 
 interface SourceRuleEngine {
-    suspend fun evaluate(asset: MediaAsset): SourceRuleResult
+    suspend fun evaluate(asset: MediaAsset): MediaRoutingDecision
     fun evaluateWithSnapshot(
         asset: MediaAsset,
         activeRules: List<SourceRule>,
-        categories: Map<Long, Category>
-    ): SourceRuleResult
+        categories: Map<Long, Category>,
+        defaultNotificationMode: NotificationMode = NotificationMode.OVERLAY
+    ): MediaRoutingDecision
 }
 
 class DefaultSourceRuleEngine(
-    private val ruleRepository: SourceRuleRepository
+    private val ruleRepository: SourceRuleRepository,
+    private val categoryRepository: CategoryRepository? = null
 ) : SourceRuleEngine {
 
-    override suspend fun evaluate(asset: MediaAsset): SourceRuleResult {
+    override suspend fun evaluate(asset: MediaAsset): MediaRoutingDecision {
         val rules = ruleRepository.getActiveRules()
-        return evaluateWithRules(asset, rules, null)
+        val categories = categoryRepository?.getAll()?.associateBy { it.id } ?: emptyMap()
+        return evaluateWithSnapshot(asset, rules, categories)
     }
 
     override fun evaluateWithSnapshot(
         asset: MediaAsset,
         activeRules: List<SourceRule>,
-        categories: Map<Long, Category>
-    ): SourceRuleResult {
-        val screenshotCatId = categories.values.find { it.name == "截图" }?.id
-        return evaluateWithRules(asset, activeRules, screenshotCatId)
-    }
+        categories: Map<Long, Category>,
+        defaultNotificationMode: NotificationMode
+    ): MediaRoutingDecision {
+        val screenshotCat = categories.values.find { it.systemKey == "screenshots" || it.name == "截图" }
 
-    private fun evaluateWithRules(
-        asset: MediaAsset,
-        rules: List<SourceRule>,
-        screenshotCategoryId: Long?
-    ): SourceRuleResult {
-        for (rule in rules) {
+        for (rule in activeRules) {
             if (matches(rule, asset)) {
-                return SourceRuleResult(
+                val targetCategory = rule.targetCategoryId?.let { categories[it] }
+                val notificationMode = rule.notificationMode
+                    ?: targetCategory?.notificationMode
+                    ?: defaultNotificationMode
+
+                return MediaRoutingDecision(
                     matchedRule = rule,
                     categoryId = rule.targetCategoryId,
-                    notificationMode = rule.notificationMode ?: NotificationMode.OVERLAY,
-                    autoClassify = rule.autoClassify && rule.targetCategoryId != null
+                    autoClassify = rule.autoClassify && rule.targetCategoryId != null,
+                    notificationMode = notificationMode,
+                    indexingEnabled = targetCategory?.indexingEnabled ?: true
                 )
             }
         }
 
         // Default fallback if no custom rule matched:
         // If relativePath or bucket or displayName contains Screenshot/截图, default to Screenshot category
-        val path = (asset.relativePath ?: "") + (asset.bucketName ?: "") + (asset.displayName ?: "")
+        val path = (asset.relativePath ?: "") + "/" + (asset.bucketName ?: "") + "/" + (asset.displayName ?: "")
         if (path.contains("Screenshot", ignoreCase = true) || path.contains("截图")) {
-            return SourceRuleResult(
+            return MediaRoutingDecision(
                 matchedRule = null,
-                categoryId = screenshotCategoryId ?: 4L,
-                notificationMode = NotificationMode.SILENT,
-                autoClassify = true
+                categoryId = screenshotCat?.id,
+                autoClassify = screenshotCat != null,
+                notificationMode = screenshotCat?.notificationMode ?: NotificationMode.SILENT,
+                indexingEnabled = screenshotCat?.indexingEnabled ?: false
             )
         }
 
-        return SourceRuleResult(
+        return MediaRoutingDecision(
             matchedRule = null,
             categoryId = null,
-            notificationMode = NotificationMode.OVERLAY,
-            autoClassify = false
+            autoClassify = false,
+            notificationMode = defaultNotificationMode,
+            indexingEnabled = true
         )
     }
 
@@ -91,18 +106,18 @@ class DefaultSourceRuleEngine(
 
         // Match relative path pattern (SQL LIKE style, e.g. %Screenshots%)
         if (!rule.relativePathPattern.isNullOrBlank()) {
-            val pattern = rule.relativePathPattern.replace("%", ".*").replace("_", ".")
+            val regex = sqlLikePatternToRegex(rule.relativePathPattern)
             val path = asset.relativePath ?: ""
-            if (!Regex(pattern, RegexOption.IGNORE_CASE).containsMatchIn(path)) {
+            if (!regex.containsMatchIn(path)) {
                 return false
             }
         }
 
         // Match bucket name pattern
         if (!rule.bucketPattern.isNullOrBlank()) {
-            val pattern = rule.bucketPattern.replace("%", ".*").replace("_", ".")
+            val regex = sqlLikePatternToRegex(rule.bucketPattern)
             val bucket = asset.bucketName ?: ""
-            if (!Regex(pattern, RegexOption.IGNORE_CASE).containsMatchIn(bucket)) {
+            if (!regex.containsMatchIn(bucket)) {
                 return false
             }
         }

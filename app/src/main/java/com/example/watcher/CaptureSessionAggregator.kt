@@ -49,7 +49,7 @@ class CaptureSessionAggregator(
         }
     }
 
-    suspend fun aggregate(asset: MediaAsset): Long = mutex.withLock {
+    suspend fun aggregate(asset: MediaAsset, notificationMode: com.example.core.enum.NotificationMode? = null): Long = mutex.withLock {
         val now = asset.addedAt
         val current = activeSession
         val windowMs = settingsRepository.getSnapshot().aggregationWindowSeconds * 1000L
@@ -82,7 +82,8 @@ class CaptureSessionAggregator(
                 startedAt = now,
                 endedAt = now,
                 mediaCount = 1,
-                status = SessionStatus.COLLECTING
+                status = SessionStatus.COLLECTING,
+                notificationMode = notificationMode
             )
             sessionId = sessionRepository.save(newSession)
             activeSession = newSession.copy(id = sessionId)

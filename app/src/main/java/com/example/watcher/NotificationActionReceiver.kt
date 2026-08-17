@@ -31,22 +31,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     val pendingResult = goAsync()
                     CoroutineScope(Dispatchers.IO).launch {
                         try {
-                            val category = app.categoryRepository.getById(categoryId)
-                            val items = app.mediaRepository.getBySession(sessionId)
-                            if (items.isNotEmpty()) {
-                                // Calculate expireAt based on asset capturedAt, not current time
-                                for (item in items) {
-                                    val expireAt = category?.let {
-                                        app.policyEngine.calculateExpireAt(item.capturedAt ?: item.addedAt, it)
-                                    }
-                                    app.mediaRepository.assignCategory(item.id, categoryId, expireAt)
-                                }
-                            }
-                            
-                            app.captureSessionRepository.updateStatus(sessionId, SessionStatus.CLASSIFIED.name)
-
-                            // Cancel alert notification
-                            app.notificationManager.cancelAlertNotification()
+                            app.classifySessionUseCase(sessionId, categoryId)
 
                             CoroutineScope(Dispatchers.Main).launch {
                                 Toast.makeText(context, "已归类到「$categoryName」", Toast.LENGTH_SHORT).show()

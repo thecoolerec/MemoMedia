@@ -143,12 +143,7 @@ class PhotosViewModel(application: Application) : AndroidViewModel(application) 
         val selected = _selectedMediaIds.value
         viewModelScope.launch {
             for (id in selected) {
-                val asset = mediaRepository.getById(id)
-                val expireAt = app.policyEngine.calculateExpireAt(
-                    asset?.capturedAt ?: asset?.addedAt ?: System.currentTimeMillis(),
-                    category
-                )
-                mediaRepository.assignCategory(id, category.id, expireAt)
+                app.classifyMediaUseCase(id, category.id)
             }
             clearSelection()
         }
@@ -156,11 +151,7 @@ class PhotosViewModel(application: Application) : AndroidViewModel(application) 
 
     fun assignCategoryToSingle(asset: MediaAsset, category: Category) {
         viewModelScope.launch {
-            val expireAt = app.policyEngine.calculateExpireAt(
-                asset.capturedAt ?: asset.addedAt,
-                category
-            )
-            mediaRepository.assignCategory(asset.id, category.id, expireAt)
+            app.classifyMediaUseCase(asset.id, category.id)
             _selectedAssetForDetail.value = mediaRepository.getById(asset.id)
         }
     }
@@ -183,38 +174,48 @@ class PhotosViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun deleteAsset(asset: MediaAsset) {
-        pendingDeleteIds = listOf(asset.id)
-        val deleteRequest = MediaDeletionHelper.createDeleteRequestOrDeleteDirectly(
-            getApplication(),
-            listOf(asset.contentUri)
-        )
-        if (deleteRequest != null) {
-            _pendingDeleteRequest.value = deleteRequest
-        } else {
-            confirmDeletedInDb()
-            closeDetail()
+        viewModelScope.launch {
+            val result = app.deleteMediaUseCase.execute(listOf(asset))
+            when (result) {
+                is com.example.domain.DeleteMediaResult.NeedsUserConsent -> {
+                    pendingDeleteIds = listOf(asset.id)
+                    _pendingDeleteRequest.value = result.intentSenderRequest
+                }
+                is com.example.domain.DeleteMediaResult.Success -> {
+                    closeDetail()
+                }
+                is com.example.domain.DeleteMediaResult.Failure -> {
+                    // Handled
+                }
+            }
         }
     }
 
     fun deleteSelected() {
         val selectedIds = _selectedMediaIds.value.toList()
-        pendingDeleteIds = selectedIds
-        val uris = uiState.value.items.filter { selectedIds.contains(it.id) }.map { it.contentUri }
-        val deleteRequest = MediaDeletionHelper.createDeleteRequestOrDeleteDirectly(
-            getApplication(),
-            uris
-        )
-        if (deleteRequest != null) {
-            _pendingDeleteRequest.value = deleteRequest
-        } else {
-            confirmDeletedInDb()
+        viewModelScope.launch {
+            val targetAssets = uiState.value.items.filter { selectedIds.contains(it.id) }
+            val result = app.deleteMediaUseCase.execute(targetAssets)
+            when (result) {
+                is com.example.domain.DeleteMediaResult.NeedsUserConsent -> {
+                    pendingDeleteIds = selectedIds
+                    _pendingDeleteRequest.value = result.intentSenderRequest
+                }
+                is com.example.domain.DeleteMediaResult.Success -> {
+                    clearSelection()
+                }
+                is com.example.domain.DeleteMediaResult.Failure -> {
+                    clearSelection()
+                }
+            }
         }
     }
 
     fun confirmDeletedInDb() {
         viewModelScope.launch {
             if (pendingDeleteIds.isNotEmpty()) {
-                mediaRepository.markDeleted(pendingDeleteIds)
+                val targetAssets = uiState.value.items.filter { pendingDeleteIds.contains(it.id) }
+                app.deleteMediaUseCase.onUserConsentResult(targetAssets, true)
                 pendingDeleteIds = emptyList()
             }
             clearSelection()
@@ -224,8 +225,14 @@ class PhotosViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun cancelDeleteRequest() {
-        pendingDeleteIds = emptyList()
-        _pendingDeleteRequest.value = null
+        viewModelScope.launch {
+            if (pendingDeleteIds.isNotEmpty()) {
+                val targetAssets = uiState.value.items.filter { pendingDeleteIds.contains(it.id) }
+                app.deleteMediaUseCase.onUserConsentResult(targetAssets, false)
+                pendingDeleteIds = emptyList()
+            }
+            _pendingDeleteRequest.value = null
+        }
     }
 
     fun refreshMediaStore() {

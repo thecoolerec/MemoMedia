@@ -66,6 +66,7 @@ fun MediaAsset.toEntity(): MediaAssetEntity = MediaAssetEntity(
 
 fun CategoryEntity.toDomain(): Category = Category(
     id = id,
+    systemKey = systemKey,
     name = name,
     icon = icon,
     sortOrder = sortOrder,
@@ -80,6 +81,7 @@ fun CategoryEntity.toDomain(): Category = Category(
 
 fun Category.toEntity(): CategoryEntity = CategoryEntity(
     id = id,
+    systemKey = systemKey,
     name = name,
     icon = icon,
     sortOrder = sortOrder,
@@ -103,7 +105,8 @@ fun CaptureSessionEntity.toDomain(): CaptureSession = CaptureSession(
     endedAt = endedAt,
     mediaCount = mediaCount,
     status = runCatching { SessionStatus.valueOf(status) }.getOrDefault(SessionStatus.COLLECTING),
-    deliveryStatus = runCatching { com.example.core.model.DeliveryStatus.valueOf(deliveryStatus) }.getOrDefault(com.example.core.model.DeliveryStatus.NOT_DELIVERED)
+    deliveryStatus = runCatching { com.example.core.enum.DeliveryStatus.valueOf(deliveryStatus) }.getOrDefault(com.example.core.enum.DeliveryStatus.NOT_DELIVERED),
+    notificationMode = notificationMode?.let { runCatching { NotificationMode.valueOf(it) }.getOrNull() }
 )
 
 fun CaptureSession.toEntity(): CaptureSessionEntity = CaptureSessionEntity(
@@ -114,7 +117,8 @@ fun CaptureSession.toEntity(): CaptureSessionEntity = CaptureSessionEntity(
     endedAt = endedAt,
     mediaCount = mediaCount,
     status = status.name,
-    deliveryStatus = deliveryStatus.name
+    deliveryStatus = deliveryStatus.name,
+    notificationMode = notificationMode?.name
 )
 
 fun SourceRuleEntity.toDomain(): SourceRule = SourceRule(

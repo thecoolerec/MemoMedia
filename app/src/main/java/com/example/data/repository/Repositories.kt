@@ -22,6 +22,9 @@ class MediaRepository(private val db: AppDatabase) {
     fun observePending(): Flow<List<MediaAsset>> =
         dao.observePending().map { list -> list.map { it.toDomain() } }
 
+    fun observeUnclassified(): Flow<List<MediaAsset>> =
+        dao.observeUnclassified().map { list -> list.map { it.toDomain() } }
+
     fun observeByCategory(categoryId: Long): Flow<List<MediaAsset>> =
         dao.observeByCategory(categoryId).map { list -> list.map { it.toDomain() } }
 
@@ -33,6 +36,7 @@ class MediaRepository(private val db: AppDatabase) {
 
     fun observeTotalCount(): Flow<Int> = dao.observeTotalCount()
     fun observePendingCount(): Flow<Int> = dao.observePendingCount()
+    fun observeUnclassifiedCount(): Flow<Int> = dao.observeUnclassifiedCount()
     fun observeExpiredCount(): Flow<Int> = dao.observeExpiredCount()
     fun observeCountByCategory(categoryId: Long): Flow<Int> = dao.observeCountByCategory(categoryId)
 
@@ -78,10 +82,11 @@ class CategoryRepository(private val db: AppDatabase) {
 
     suspend fun getById(id: Long): Category? = dao.getById(id)?.toDomain()
     suspend fun getByName(name: String): Category? = dao.getByName(name)?.toDomain()
+    suspend fun getBySystemKey(systemKey: String): Category? = dao.getBySystemKey(systemKey)?.toDomain()
 
     suspend fun save(category: Category): Long = dao.insert(category.toEntity())
     suspend fun update(category: Category) = dao.update(category.toEntity())
-    suspend fun delete(id: Long) = dao.deleteById(id)
+    suspend fun delete(id: Long) = dao.deleteCategoryAndUnlink(id)
 }
 
 class TagRepository(private val db: AppDatabase) {

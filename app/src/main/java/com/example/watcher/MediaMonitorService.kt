@@ -83,36 +83,12 @@ class MediaMonitorService : Service() {
     private suspend fun deliverPendingSessions(app: LocalMediaApplication) {
         val undelivered = app.captureSessionRepository.getUndeliveredReadySessions()
         for (session in undelivered) {
-            deliverSession(app, session)
+            app.sessionDeliveryCoordinator.deliverSession(session)
         }
     }
 
     private suspend fun deliverSession(app: LocalMediaApplication, session: com.example.core.model.CaptureSession) {
-        val items = app.mediaRepository.getBySession(session.id)
-        if (items.isEmpty()) return
-        val categories = app.categoryRepository.getAll()
-        val settings = app.appSettingsRepository.getSnapshot()
-
-        if (settings.defaultNotificationMode == com.example.core.enum.NotificationMode.SILENT) {
-            app.captureSessionRepository.updateDeliveryStatus(session.id, com.example.core.model.DeliveryStatus.NOTIFICATION_DELIVERED.name)
-            return
-        }
-
-        // Check overlay permission
-        val canOverlay = settings.overlayEnabled && if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            Settings.canDrawOverlays(this@MediaMonitorService)
-        } else false
-
-        if (canOverlay && settings.defaultNotificationMode == com.example.core.enum.NotificationMode.OVERLAY) {
-            CoroutineScope(Dispatchers.Main).launch {
-                overlay?.show(session, items, categories)
-            }
-            app.captureSessionRepository.updateDeliveryStatus(session.id, com.example.core.model.DeliveryStatus.OVERLAY_DELIVERED.name)
-        } else {
-            // Fallback to Heads-up notification
-            app.notificationManager.showSessionReadyNotification(session, categories)
-            app.captureSessionRepository.updateDeliveryStatus(session.id, com.example.core.model.DeliveryStatus.NOTIFICATION_DELIVERED.name)
-        }
+        app.sessionDeliveryCoordinator.deliverSession(session)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

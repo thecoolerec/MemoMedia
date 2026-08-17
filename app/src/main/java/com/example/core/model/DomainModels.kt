@@ -1,5 +1,6 @@
 package com.example.core.model
 
+import com.example.core.enum.DeliveryStatus
 import com.example.core.enum.ExpireAction
 import com.example.core.enum.MediaStatus
 import com.example.core.enum.MediaType
@@ -32,6 +33,7 @@ data class MediaAsset(
 
 data class Category(
     val id: Long = 0,
+    val systemKey: String? = null,
     val name: String,
     val icon: String? = null,
     val sortOrder: Int = 0,
@@ -49,12 +51,6 @@ data class Tag(
     val name: String
 )
 
-enum class DeliveryStatus {
-    NOT_DELIVERED,
-    OVERLAY_DELIVERED,
-    NOTIFICATION_DELIVERED
-}
-
 data class CaptureSession(
     val id: Long = 0,
     val sourcePackage: String? = null,
@@ -63,7 +59,16 @@ data class CaptureSession(
     val endedAt: Long,
     val mediaCount: Int,
     val status: SessionStatus = SessionStatus.COLLECTING,
-    val deliveryStatus: DeliveryStatus = DeliveryStatus.NOT_DELIVERED
+    val deliveryStatus: DeliveryStatus = DeliveryStatus.NOT_DELIVERED,
+    val notificationMode: NotificationMode? = NotificationMode.OVERLAY
+)
+
+data class MediaRoutingDecision(
+    val matchedRule: SourceRule? = null,
+    val categoryId: Long? = null,
+    val autoClassify: Boolean = false,
+    val notificationMode: NotificationMode = NotificationMode.OVERLAY,
+    val indexingEnabled: Boolean = true
 )
 
 data class SourceRule(

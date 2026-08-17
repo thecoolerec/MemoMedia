@@ -81,12 +81,16 @@ data class MediaAssetEntity(
 @Entity(
     tableName = "category",
     indices = [
-        Index(value = ["name"], unique = true)
+        Index(value = ["name"], unique = true),
+        Index(value = ["system_key"], unique = true)
     ]
 )
 data class CategoryEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
+
+    @ColumnInfo(name = "system_key")
+    val systemKey: String? = null,
 
     val name: String,
 
@@ -166,7 +170,10 @@ data class CaptureSessionEntity(
     val status: String,
 
     @ColumnInfo(name = "delivery_status")
-    val deliveryStatus: String = "NOT_DELIVERED"
+    val deliveryStatus: String = "NOT_DELIVERED",
+
+    @ColumnInfo(name = "notification_mode")
+    val notificationMode: String? = null
 )
 
 @Entity(
