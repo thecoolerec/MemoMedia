@@ -15,9 +15,28 @@ concurrency:
 
 jobs:
   unit-tests:
-    name: Run JVM unit tests
+    name: JVM tests (${{ matrix.name }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: migrations
+            tests: --tests com.example.RoomMigrationTest
+          - name: data-actions
+            tests: >-
+              --tests com.example.CategoryDeletionTest
+              --tests com.example.ClassifyTransactionTest
+              --tests com.example.DeleteMediaUseCaseTest
+          - name: watcher
+            tests: >-
+              --tests com.example.BootCatchupTest
+              --tests com.example.SessionDeliveryTest
+          - name: smoke
+            tests: >-
+              --tests com.example.ExampleRobolectricTest
+              --tests com.example.ExampleUnitTest
 
     steps:
       - name: Check out repository
@@ -48,13 +67,15 @@ jobs:
           -dname "CN=Android Debug,O=Android,C=US"
 
       - name: Run unit tests
-        run: gradle --no-daemon :app:testDebugUnitTest
+        run: >-
+          gradle --no-daemon --console=plain :app:testDebugUnitTest
+          ${{ matrix.tests }}
 
       - name: Upload unit test results
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: MemoMedia-unit-test-results-${{ github.run_number }}
+          name: MemoMedia-unit-test-results-${{ matrix.name }}-${{ github.run_number }}
           path: |
             app/build/reports/tests/testDebugUnitTest
             app/build/test-results/testDebugUnitTest
