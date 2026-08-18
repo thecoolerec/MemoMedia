@@ -54,7 +54,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -76,6 +76,9 @@ import coil.compose.AsyncImage
 import com.example.core.enum.NotificationMode
 import com.example.core.model.Category
 import com.example.core.model.SourceRule
+import com.example.ui.components.AppleSegmentedControl
+import com.example.ui.components.AppleSwitch
+import com.example.ui.components.AppleToolbarButton
 import com.example.ui.components.getCategoryColor
 import com.example.ui.components.getCategoryIcon
 import com.example.ui.util.formatFileSize
@@ -91,17 +94,20 @@ fun CategoriesScreen(
     var pendingDelete by remember { mutableStateOf<CategoryWithStats?>(null) }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
+            LargeTopAppBar(
                 title = {
                     Text(
                         text = "分类",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.Bold
                     )
                 },
                 actions = {
-                    IconButton(
+                    AppleToolbarButton(
+                        icon = Icons.Default.Add,
+                        contentDescription = "新建",
                         onClick = {
                             if (selectedTabIndex == 0) {
                                 viewModel.openCreateCategoryDialog()
@@ -109,13 +115,12 @@ fun CategoriesScreen(
                                 viewModel.openCreateRuleDialog()
                             }
                         },
-                        modifier = Modifier.testTag("btn_add_category_or_rule")
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "新建")
-                    }
+                        testTag = "btn_add_category_or_rule"
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = MaterialTheme.colorScheme.background
                 )
             )
         },
@@ -126,21 +131,15 @@ fun CategoriesScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            SecondaryTabRow(
-                selectedTabIndex = selectedTabIndex,
-                containerColor = MaterialTheme.colorScheme.surface
-            ) {
-                Tab(
-                    selected = selectedTabIndex == 0,
-                    onClick = { selectedTabIndex = 0 },
-                    text = { Text("分类相册 (${state.categoryStats.size})") }
-                )
-                Tab(
-                    selected = selectedTabIndex == 1,
-                    onClick = { selectedTabIndex = 1 },
-                    text = { Text("分流规则 (${state.sourceRules.size})") }
-                )
-            }
+            AppleSegmentedControl(
+                labels = listOf(
+                    "分类相册 ${state.categoryStats.size}",
+                    "分流规则 ${state.sourceRules.size}"
+                ),
+                selectedIndex = selectedTabIndex,
+                onSelect = { selectedTabIndex = it },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
 
             if (selectedTabIndex == 0) {
                 CategoryGridTab(
@@ -263,7 +262,7 @@ private fun CategoryCard2Column(
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surface
         ),
         modifier = Modifier
             .fillMaxWidth()
@@ -511,7 +510,7 @@ private fun RulesListTab(
                 val targetCat = categories.find { it.id == rule.targetCategoryId }
                 Card(
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -548,7 +547,7 @@ private fun RulesListTab(
                             )
                         }
 
-                        Switch(
+                        AppleSwitch(
                             checked = rule.enabled,
                             onCheckedChange = { onToggleActive(rule) }
                         )
@@ -647,7 +646,7 @@ private fun CategoryEditorDialog(
                         text = "永久保留",
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    Switch(
+                    AppleSwitch(
                         checked = isPermanent,
                         onCheckedChange = {
                             isPermanent = it
@@ -782,7 +781,7 @@ private fun RuleEditorDialog(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("分类时静默处理（不弹通知）")
-                    Switch(
+                    AppleSwitch(
                         checked = notificationMode == NotificationMode.SILENT,
                         onCheckedChange = {
                             notificationMode = if (it) NotificationMode.SILENT else NotificationMode.HEADS_UP

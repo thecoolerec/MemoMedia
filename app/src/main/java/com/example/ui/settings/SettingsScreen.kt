@@ -45,6 +45,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -57,6 +58,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.core.model.MediaAsset
+import com.example.ui.components.AppleSectionCard
+import com.example.ui.components.AppleSwitch
 import com.example.ui.components.MediaThumbnail
 import java.util.Locale
 
@@ -70,9 +73,16 @@ fun SettingsScreen(
     val context = LocalContext.current
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = { Text("设置", style = MaterialTheme.typography.headlineSmall) },
+            LargeTopAppBar(
+                title = {
+                    Text(
+                        text = "设置",
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
                 )
@@ -95,6 +105,7 @@ fun SettingsScreen(
 
             item { SettingsSectionHeader("媒体管理") }
             item {
+                AppleSectionCard(modifier = Modifier.padding(horizontal = 16.dp)) {
                 SettingsRow(
                     icon = Icons.Default.Refresh,
                     title = "媒体库同步",
@@ -126,16 +137,18 @@ fun SettingsScreen(
                     onClick = if (state.isRetentionScanning) null else viewModel::triggerRetentionScan,
                     modifier = Modifier.testTag("scan_expired_media_button")
                 )
+                }
             }
 
             item { SettingsSectionHeader("自动整理") }
             item {
+                AppleSectionCard(modifier = Modifier.padding(horizontal = 16.dp)) {
                 SettingsRow(
                     icon = Icons.Default.Layers,
                     title = "后台监听",
                     subtitle = "发现新媒体后自动加入待整理",
                     trailingContent = {
-                        Switch(
+                        AppleSwitch(
                             checked = state.isServiceRunning,
                             onCheckedChange = viewModel::toggleBackgroundService
                         )
@@ -168,10 +181,12 @@ fun SettingsScreen(
                     selectedValue = state.aggregationWindowSeconds,
                     onSelect = viewModel::setAggregationWindow
                 )
+                }
             }
 
             item { SettingsSectionHeader("通知") }
             item {
+                AppleSectionCard(modifier = Modifier.padding(horizontal = 16.dp)) {
                 SettingsChoiceGroup(
                     icon = Icons.Default.Notifications,
                     title = "新媒体提醒",
@@ -185,24 +200,29 @@ fun SettingsScreen(
                     selectedValue = state.notificationMode,
                     onSelect = viewModel::setNotificationMode
                 )
+                }
             }
 
             item { SettingsSectionHeader("权限与隐私") }
             item {
+                AppleSectionCard(modifier = Modifier.padding(horizontal = 16.dp)) {
                 SettingsRow(
                     icon = Icons.Default.Security,
                     title = "本地处理说明",
                     subtitle = "照片、分类与规则均保存在设备本地"
                 )
+                }
             }
 
             item { SettingsSectionHeader("其他") }
             item {
+                AppleSectionCard(modifier = Modifier.padding(horizontal = 16.dp)) {
                 SettingsRow(
                     icon = Icons.Default.Info,
                     title = "关于 MemoMedia",
                     value = "1.0"
                 )
+                }
             }
         }
     }
@@ -240,7 +260,7 @@ private fun StorageSummaryCard(state: SettingsUiState, modifier: Modifier = Modi
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+            containerColor = MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {

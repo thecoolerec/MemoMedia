@@ -46,7 +46,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -92,19 +92,20 @@ fun InboxScreen(
     var activeViewerIndex by remember { mutableIntStateOf(-1) }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
+            LargeTopAppBar(
                 title = {
                     Column {
                         Text(
                             text = "待整理",
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.headlineLarge,
                             fontWeight = FontWeight.Bold
                         )
                         if (state.totalPendingCount > 0) {
                             Text(
-                                text = "发现新媒体，等待你一键归类",
+                                text = "${state.totalPendingCount} 项新媒体等待归类",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -112,7 +113,7 @@ fun InboxScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = MaterialTheme.colorScheme.background
                 )
             )
         }
@@ -284,7 +285,7 @@ private fun CaptureSessionCard(
             .testTag("capture_session_card_${session.id}"),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
         Column(
@@ -505,7 +506,7 @@ private fun SinglePendingMediaCard(
             .clickable(onClick = onClick)
             .testTag("single_pending_card_${asset.id}"),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            containerColor = MaterialTheme.colorScheme.surface
         ),
         shape = RoundedCornerShape(16.dp)
     ) {

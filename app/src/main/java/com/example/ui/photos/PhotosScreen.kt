@@ -50,7 +50,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.core.model.needsOrganization
+import com.example.ui.components.AppleToolbarButton
 import com.example.ui.components.CategoryPickerSheet
 import com.example.ui.components.EmptyStateCard
 import com.example.ui.components.MediaThumbnail
@@ -122,6 +123,7 @@ fun PhotosScreen(
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             if (state.isSearchActive) {
@@ -174,45 +176,48 @@ fun PhotosScreen(
                     }
                 }
             } else {
-                TopAppBar(
+                LargeTopAppBar(
                     title = {
                         Text(
                             text = if (state.isSelectionMode) "已选择 ${state.selectedMediaIds.size} 项" else "照片",
-                            style = MaterialTheme.typography.titleLarge,
+                            style = if (state.isSelectionMode) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineLarge,
                             fontWeight = FontWeight.Bold
                         )
                     },
                     actions = {
                         if (state.isSelectionMode) {
-                            IconButton(
+                            AppleToolbarButton(
+                                icon = Icons.Default.SelectAll,
+                                contentDescription = "全选",
                                 onClick = { viewModel.selectAll() },
-                                modifier = Modifier.testTag("btn_select_all")
-                            ) {
-                                Icon(Icons.Default.SelectAll, contentDescription = "全选")
-                            }
-                            IconButton(
+                                testTag = "btn_select_all"
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AppleToolbarButton(
+                                icon = Icons.Default.Close,
+                                contentDescription = "取消选择",
                                 onClick = { viewModel.clearSelection() },
-                                modifier = Modifier.testTag("btn_cancel_selection")
-                            ) {
-                                Icon(Icons.Default.Close, contentDescription = "取消选择")
-                            }
+                                testTag = "btn_cancel_selection"
+                            )
                         } else {
-                            IconButton(
+                            AppleToolbarButton(
+                                icon = Icons.Default.Search,
+                                contentDescription = "搜索",
                                 onClick = { viewModel.setSearchActive(true) },
-                                modifier = Modifier.testTag("btn_search_photos")
-                            ) {
-                                Icon(Icons.Default.Search, contentDescription = "搜索")
-                            }
-                            IconButton(
+                                testTag = "btn_search_photos"
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AppleToolbarButton(
+                                icon = Icons.Default.Checklist,
+                                contentDescription = "批量选择",
                                 onClick = { viewModel.toggleSelectionMode() },
-                                modifier = Modifier.testTag("btn_toggle_selection")
-                            ) {
-                                Icon(Icons.Default.Checklist, contentDescription = "批量选择")
-                            }
+                                testTag = "btn_toggle_selection"
+                            )
                         }
+                        Spacer(modifier = Modifier.width(8.dp))
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
+                        containerColor = MaterialTheme.colorScheme.background
                     )
                 )
             }
