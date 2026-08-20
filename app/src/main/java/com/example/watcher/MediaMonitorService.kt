@@ -1,6 +1,7 @@
 package com.example.watcher
 
 import android.app.Service
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.database.ContentObserver
@@ -10,7 +11,6 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.provider.MediaStore
-import android.provider.Settings
 import com.example.LocalMediaApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -77,7 +77,6 @@ class MediaMonitorService : Service() {
         registerObservers(app)
         observeSessionReadyEvents(app)
 
-        // Perform initial reconcile and delivery on start
         serviceScope.launch {
             app.captureSessionAggregator.recoverStaleSessions()
             app.mediaReconciler.reconcile(forceFullScan = false)
@@ -92,7 +91,10 @@ class MediaMonitorService : Service() {
         }
     }
 
-    private suspend fun deliverSession(app: LocalMediaApplication, session: com.example.core.model.CaptureSession) {
+    private suspend fun deliverSession(
+        app: LocalMediaApplication,
+        session: com.example.core.model.CaptureSession
+    ) {
         app.sessionDeliveryCoordinator.deliverSession(session)
     }
 
@@ -108,20 +110,8 @@ class MediaMonitorService : Service() {
 
     private fun registerObservers(app: LocalMediaApplication) {
         val handler = Handler(Looper.getMainLooper())
-
-        imagesObserver = object : ContentObserver(handler) {
-            override fun onChange(selfChange: Boolean, uri: Uri?) {
-                super.onChange(selfChange, uri)
-                triggerDebouncedReconcile(app)
-            }
-        }
-
-        videosObserver = object : ContentObserver(handler) {
-            override fun onChange(selfChange: Boolean, uri: Uri?) {
-                super.onChange(selfChange, uri)
-                triggerDebouncedReconcile(app)
-            }
-        }
+        imagesObserver = createMediaObserver(handler, app)
+        videosObserver = createMediaObserver(handler, app)
 
         contentResolver.registerContentObserver(
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
@@ -135,10 +125,30 @@ class MediaMonitorService : Service() {
         )
     }
 
-    private fun triggerDebouncedReconcile(app: LocalMediaApplication) {
+    private fun createMediaObserver(
+        handler: Handler,
+        app: LocalMediaApplication
+    ): ContentObserver = object : ContentObserver(handler) {
+        override fun onChange(selfChange: Boolean) {
+            triggerReconcile(app, immediate = false)
+        }
+
+        override fun onChange(selfChange: Boolean, uri: Uri?) {
+            triggerReconcile(app, immediate = false)
+        }
+
+        override fun onChange(selfChange: Boolean, uri: Uri?, flags: Int) {
+            val isInsert = flags and ContentResolver.NOTIFY_INSERT != 0
+            triggerReconcile(app, immediate = isInsert)
+        }
+    }
+
+    private fun triggerReconcile(app: LocalMediaApplication, immediate: Boolean) {
         debounceJob?.cancel()
         debounceJob = serviceScope.launch {
-            delay(500L) // 500ms debounce
+            if (!immediate) {
+                delay(500L)
+            }
             app.mediaReconciler.reconcile(forceFullScan = false)
         }
     }

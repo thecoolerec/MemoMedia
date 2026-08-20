@@ -65,6 +65,7 @@ import coil.request.ImageRequest
 import com.example.core.enum.MediaStatus
 import com.example.core.model.Category
 import com.example.core.model.MediaAsset
+import com.example.core.model.MediaSourceResolver
 import com.example.core.model.Tag
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -360,7 +361,7 @@ fun MediaDetailDialog(
                                 value = asset.capturedAt?.let { dateFormat.format(Date(it)) } ?: "未知"
                             )
                             MetadataRow(label = "相册目录", value = asset.bucketName ?: asset.relativePath ?: "未知")
-                            MetadataRow(label = "来源应用", value = asset.ownerPackage ?: "未知/系统相机")
+                            MetadataRow(label = "来源", value = MediaSourceResolver.resolve(asset).title)
                             MetadataRow(label = "MIME 类型", value = asset.mimeType ?: "未知")
                         }
                     }

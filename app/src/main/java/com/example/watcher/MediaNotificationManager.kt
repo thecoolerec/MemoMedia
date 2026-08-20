@@ -13,6 +13,8 @@ import com.example.core.enum.NotificationMode
 import com.example.core.model.CaptureSession
 import com.example.core.model.Category
 import com.example.core.model.DeliveryResult
+import com.example.core.model.MediaAsset
+import com.example.core.model.MediaSourceResolver
 
 class MediaNotificationManager(private val context: Context) {
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -80,7 +82,11 @@ class MediaNotificationManager(private val context: Context) {
         return if (hash == NOTIFICATION_ID_MONITOR) hash + 100 else hash
     }
 
-    fun showSessionReadyNotification(session: CaptureSession, categories: List<Category>): DeliveryResult {
+    fun showSessionReadyNotification(
+        session: CaptureSession,
+        items: List<MediaAsset>,
+        categories: List<Category>
+    ): DeliveryResult {
         return try {
             val appIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -94,7 +100,9 @@ class MediaNotificationManager(private val context: Context) {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            val sourceTitle = getSourceDisplayName(session.sourcePackage)
+            val sourceTitle = items.firstOrNull()
+                ?.let { MediaSourceResolver.resolve(it).title }
+                ?: getSourceDisplayName(session.sourcePackage)
             val title = "$sourceTitle · 发现 ${session.mediaCount} 项新媒体"
             val builder = NotificationCompat.Builder(context, CHANNEL_ALERT)
                 .setContentTitle(title)

@@ -2,12 +2,11 @@
 .gradle
 .kotlin
 /local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
+/.idea
+/.vscode
+/.hallmark
+/artifacts
+/gradle/gradle-daemon-jvm.properties
 .DS_Store
 /build
 /captures

@@ -59,12 +59,12 @@ private val LightColorScheme = lightColorScheme(
     surfaceContainerHigh = SurfaceContainerHighLight
 )
 
-private val AppleInspiredShapes = Shapes(
-    extraSmall = RoundedCornerShape(8.dp),
-    small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(22.dp),
-    extraLarge = RoundedCornerShape(28.dp)
+private val MemoMediaShapes = Shapes(
+    extraSmall = RoundedCornerShape(6.dp),
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(14.dp),
+    large = RoundedCornerShape(18.dp),
+    extraLarge = RoundedCornerShape(24.dp)
 )
 
 @Composable
@@ -80,7 +80,7 @@ fun LocalMediaTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
-        shapes = AppleInspiredShapes,
+        shapes = MemoMediaShapes,
         content = content
     )
 }

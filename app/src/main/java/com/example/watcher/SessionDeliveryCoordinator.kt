@@ -38,7 +38,7 @@ class SessionDeliveryCoordinator(
                 DeliveryResult.Success(NotificationMode.SILENT)
             }
             NotificationMode.NOTIFICATION, NotificationMode.HEADS_UP -> {
-                val result = notificationManager.showSessionReadyNotification(session, categories)
+                val result = notificationManager.showSessionReadyNotification(session, items, categories)
                 if (result is DeliveryResult.Success) {
                     withContext(Dispatchers.IO) {
                         sessionRepository.updateDeliveryStatus(session.id, DeliveryStatus.DELIVERED_NOTIFICATION.name)
@@ -64,7 +64,7 @@ class SessionDeliveryCoordinator(
                         overlayResult
                     } else {
                         // Fallback to notification when overlay display fails
-                        val notifResult = notificationManager.showSessionReadyNotification(session, categories)
+                        val notifResult = notificationManager.showSessionReadyNotification(session, items, categories)
                         if (notifResult is DeliveryResult.Success) {
                             withContext(Dispatchers.IO) {
                                 sessionRepository.updateDeliveryStatus(session.id, DeliveryStatus.DELIVERED_NOTIFICATION.name)
@@ -74,7 +74,7 @@ class SessionDeliveryCoordinator(
                     }
                 } else {
                     // Fallback to Notification when overlay is disabled in settings or permission is not granted
-                    val notifResult = notificationManager.showSessionReadyNotification(session, categories)
+                    val notifResult = notificationManager.showSessionReadyNotification(session, items, categories)
                     if (notifResult is DeliveryResult.Success) {
                         withContext(Dispatchers.IO) {
                             sessionRepository.updateDeliveryStatus(session.id, DeliveryStatus.DELIVERED_NOTIFICATION.name)

@@ -66,6 +66,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -81,6 +82,7 @@ import coil.request.ImageRequest
 import com.example.core.enum.MediaStatus
 import com.example.core.model.Category
 import com.example.core.model.MediaAsset
+import com.example.core.model.MediaSourceResolver
 import com.example.core.model.Tag
 import com.example.ui.util.formatFileSize
 import java.text.SimpleDateFormat
@@ -155,7 +157,7 @@ fun MediaViewer(
                 }
             }
 
-            // Top Bar Chrome
+            // Top Bar Chrome with smooth gradient
             AnimatedVisibility(
                 visible = isChromeVisible,
                 enter = fadeIn() + slideInVertically { -it },
@@ -165,7 +167,15 @@ fun MediaViewer(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color.Black.copy(alpha = 0.55f))
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.75f),
+                                    Color.Black.copy(alpha = 0.35f),
+                                    Color.Transparent
+                                )
+                            )
+                        )
                         .windowInsetsPadding(WindowInsets.statusBars)
                         .padding(horizontal = 8.dp, vertical = 6.dp)
                 ) {
@@ -199,7 +209,7 @@ fun MediaViewer(
                 }
             }
 
-            // Bottom Action Bar Chrome (4 Core Actions: Share, Classify, Info, Delete)
+            // Bottom Action Bar Chrome with smooth gradient (4 Core Actions: Share, Classify, Info, Delete)
             AnimatedVisibility(
                 visible = isChromeVisible,
                 enter = fadeIn() + slideInVertically { it },
@@ -209,7 +219,15 @@ fun MediaViewer(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color.Black.copy(alpha = 0.65f))
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.5f),
+                                    Color.Black.copy(alpha = 0.85f)
+                                )
+                            )
+                        )
                         .windowInsetsPadding(WindowInsets.navigationBars)
                         .padding(horizontal = 16.dp, vertical = 10.dp)
                 ) {
@@ -560,7 +578,7 @@ fun MediaInfoBottomSheet(
                     value = asset.capturedAt?.let { dateFormat.format(Date(it)) } ?: "未知"
                 )
                 InfoMetaRow(label = "相册目录", value = asset.bucketName ?: asset.relativePath ?: "未知")
-                InfoMetaRow(label = "来源应用", value = asset.ownerPackage ?: "系统相机/未知")
+                InfoMetaRow(label = "来源", value = MediaSourceResolver.resolve(asset).title)
                 InfoMetaRow(label = "格式", value = asset.mimeType ?: "未知")
             }
 

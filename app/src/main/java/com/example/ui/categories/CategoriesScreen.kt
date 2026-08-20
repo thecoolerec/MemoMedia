@@ -54,7 +54,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -96,12 +96,12 @@ fun CategoriesScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            LargeTopAppBar(
+            TopAppBar(
                 title = {
                     Text(
                         text = "分类",
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.Bold
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold
                     )
                 },
                 actions = {
@@ -133,8 +133,8 @@ fun CategoriesScreen(
         ) {
             AppleSegmentedControl(
                 labels = listOf(
-                    "分类相册 ${state.categoryStats.size}",
-                    "分流规则 ${state.sourceRules.size}"
+                    "相册 ${state.categoryStats.size}",
+                    "规则 ${state.sourceRules.size}"
                 ),
                 selectedIndex = selectedTabIndex,
                 onSelect = { selectedTabIndex = it },
@@ -228,11 +228,11 @@ private fun CategoryGridTab(
     onDelete: (CategoryWithStats) -> Unit
 ) {
     LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+        columns = GridCells.Adaptive(minSize = 168.dp),
         modifier = Modifier
             .fillMaxSize()
             .testTag("categories_grid"),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -260,7 +260,7 @@ private fun CategoryCard2Column(
     var showMenu by remember { mutableStateOf(false) }
 
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
@@ -270,25 +270,76 @@ private fun CategoryCard2Column(
             .testTag("category_card_${category.id}")
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Album 2x2 Collage Preview or Hero Cover
+            // Album Collage Preview or Hero Cover
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(1.2f)
+                    .aspectRatio(1.35f)
                     .background(catColor.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
-                if (item.previewMedia.isNotEmpty()) {
-                    // Render 2x2 collage preview
-                    val previews = item.previewMedia.take(4)
-                    if (previews.size == 1) {
+                val previews = item.previewMedia.take(4)
+                when (previews.size) {
+                    0 -> {
+                        Icon(
+                            imageVector = getCategoryIcon(category.icon),
+                            contentDescription = null,
+                            tint = catColor,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                    1 -> {
                         AsyncImage(
                             model = Uri.parse(previews[0].contentUri),
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
                         )
-                    } else {
+                    }
+                    2 -> {
+                        Row(modifier = Modifier.fillMaxSize()) {
+                            AsyncImage(
+                                model = Uri.parse(previews[0].contentUri),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.weight(1f).fillMaxSize()
+                            )
+                            Spacer(modifier = Modifier.width(1.5.dp))
+                            AsyncImage(
+                                model = Uri.parse(previews[1].contentUri),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.weight(1f).fillMaxSize()
+                            )
+                        }
+                    }
+                    3 -> {
+                        Row(modifier = Modifier.fillMaxSize()) {
+                            AsyncImage(
+                                model = Uri.parse(previews[0].contentUri),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.weight(1f).fillMaxSize()
+                            )
+                            Spacer(modifier = Modifier.width(1.5.dp))
+                            Column(modifier = Modifier.weight(1f).fillMaxSize()) {
+                                AsyncImage(
+                                    model = Uri.parse(previews[1].contentUri),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.weight(1f).fillMaxSize()
+                                )
+                                Spacer(modifier = Modifier.height(1.5.dp))
+                                AsyncImage(
+                                    model = Uri.parse(previews[2].contentUri),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.weight(1f).fillMaxSize()
+                                )
+                            }
+                        }
+                    }
+                    else -> {
                         Column(modifier = Modifier.fillMaxSize()) {
                             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
                                 AsyncImage(
@@ -297,52 +348,32 @@ private fun CategoryCard2Column(
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.weight(1f).fillMaxSize()
                                 )
-                                if (previews.size > 1) {
-                                    Spacer(modifier = Modifier.width(1.dp))
-                                    AsyncImage(
-                                        model = Uri.parse(previews[1].contentUri),
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.weight(1f).fillMaxSize()
-                                    )
-                                }
+                                Spacer(modifier = Modifier.width(1.5.dp))
+                                AsyncImage(
+                                    model = Uri.parse(previews[1].contentUri),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.weight(1f).fillMaxSize()
+                                )
                             }
-                            if (previews.size > 2) {
-                                Spacer(modifier = Modifier.height(1.dp))
-                                Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                                    AsyncImage(
-                                        model = Uri.parse(previews[2].contentUri),
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.weight(1f).fillMaxSize()
-                                    )
-                                    Spacer(modifier = Modifier.width(1.dp))
-                                    if (previews.size > 3) {
-                                        AsyncImage(
-                                            model = Uri.parse(previews[3].contentUri),
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.weight(1f).fillMaxSize()
-                                        )
-                                    } else {
-                                        Box(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .fillMaxSize()
-                                                .background(catColor.copy(alpha = 0.2f))
-                                        )
-                                    }
-                                }
+                            Spacer(modifier = Modifier.height(1.5.dp))
+                            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                                AsyncImage(
+                                    model = Uri.parse(previews[2].contentUri),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.weight(1f).fillMaxSize()
+                                )
+                                Spacer(modifier = Modifier.width(1.5.dp))
+                                AsyncImage(
+                                    model = Uri.parse(previews[3].contentUri),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.weight(1f).fillMaxSize()
+                                )
                             }
                         }
                     }
-                } else {
-                    Icon(
-                        imageVector = getCategoryIcon(category.icon),
-                        contentDescription = null,
-                        tint = catColor,
-                        modifier = Modifier.size(36.dp)
-                    )
                 }
 
                 // Category Icon Badge top right
@@ -389,7 +420,7 @@ private fun CategoryCard2Column(
                     Box {
                         IconButton(
                             onClick = { showMenu = true },
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.MoreVert,
@@ -503,7 +534,7 @@ private fun RulesListTab(
     } else {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(rules, key = { it.id }) { rule ->

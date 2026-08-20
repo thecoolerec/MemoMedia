@@ -15,12 +15,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,7 +53,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -76,6 +79,7 @@ import com.example.ui.components.MediaThumbnail
 import com.example.ui.components.MediaViewer
 import com.example.ui.components.getCategoryColor
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,6 +98,12 @@ fun PhotosScreen(
 
     val pendingCount = remember(state.items) {
         state.items.count { it.needsOrganization }
+    }
+
+    val photoGroups = remember(state.filteredItems) {
+        state.filteredItems
+            .withIndex()
+            .groupBy { formatPhotoGroupDate(it.value.capturedAt) }
     }
 
     val deleteLauncher = rememberLauncherForActivityResult(
@@ -127,16 +137,17 @@ fun PhotosScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             if (state.isSearchActive) {
-                // Search Bar Top Bar
+                // Search Bar Top Bar with proper status bars padding
                 Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 2.dp,
-                    modifier = Modifier.fillMaxWidth()
+                    color = MaterialTheme.colorScheme.background,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(
@@ -148,6 +159,8 @@ fun PhotosScreen(
                                 contentDescription = "退出搜索"
                             )
                         }
+
+                        Spacer(modifier = Modifier.width(4.dp))
 
                         OutlinedTextField(
                             value = state.searchQuery,
@@ -165,8 +178,8 @@ fun PhotosScreen(
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = MaterialTheme.colorScheme.primary,
                                 unfocusedBorderColor = Color.Transparent,
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
                             ),
                             modifier = Modifier
                                 .weight(1f)
@@ -176,13 +189,28 @@ fun PhotosScreen(
                     }
                 }
             } else {
-                LargeTopAppBar(
+                TopAppBar(
                     title = {
-                        Text(
-                            text = if (state.isSelectionMode) "已选择 ${state.selectedMediaIds.size} 项" else "照片",
-                            style = if (state.isSelectionMode) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.Bold
-                        )
+                        if (state.isSelectionMode) {
+                            Text(
+                                text = "已选择 ${state.selectedMediaIds.size} 项",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        } else {
+                            Column {
+                                Text(
+                                    text = "照片",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "${state.filteredItems.size} 项",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     },
                     actions = {
                         if (state.isSelectionMode) {
@@ -228,20 +256,25 @@ fun PhotosScreen(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
                         .testTag("batch_action_bar"),
-                    tonalElevation = 6.dp,
-                    color = MaterialTheme.colorScheme.surface
+                    shape = RoundedCornerShape(16.dp),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
+                    color = MaterialTheme.colorScheme.surfaceContainer
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Button(
                             onClick = { showBatchCategoryPicker = true },
-                            modifier = Modifier.testTag("btn_batch_classify")
+                            modifier = Modifier.testTag("btn_batch_classify"),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
                             Icon(Icons.Default.FolderSpecial, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
@@ -251,6 +284,7 @@ fun PhotosScreen(
                         OutlinedButton(
                             onClick = { viewModel.deleteSelected() },
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.testTag("btn_batch_delete")
                         ) {
                             Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -346,41 +380,57 @@ fun PhotosScreen(
                 )
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(4),
+                    columns = GridCells.Adaptive(minSize = 96.dp),
                     modifier = Modifier
                         .fillMaxSize()
                         .testTag("photos_grid"),
-                    contentPadding = PaddingValues(2.dp),
+                    contentPadding = PaddingValues(start = 2.dp, top = 2.dp, end = 2.dp, bottom = 24.dp),
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    itemsIndexed(
-                        items = state.filteredItems,
-                        key = { _, it -> it.id }
-                    ) { index, asset ->
-                        val isSelected = state.selectedMediaIds.contains(asset.id)
-                        val category = asset.primaryCategoryId?.let { categoriesMap[it] }
+                    photoGroups.forEach { (dateLabel, indexedAssets) ->
+                        item(
+                            key = "date_$dateLabel",
+                            span = { GridItemSpan(maxLineSpan) }
+                        ) {
+                            Text(
+                                text = dateLabel,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.padding(start = 12.dp, top = 14.dp, bottom = 8.dp)
+                            )
+                        }
 
-                        MediaThumbnail(
-                            asset = asset,
-                            category = category,
-                            isSelected = isSelected,
-                            isSelectionMode = state.isSelectionMode,
-                            onClick = {
-                                if (state.isSelectionMode) {
+                        items(
+                            items = indexedAssets,
+                            key = { it.value.id }
+                        ) { indexedAsset ->
+                            val asset = indexedAsset.value
+                            val isSelected = state.selectedMediaIds.contains(asset.id)
+                            val category = asset.primaryCategoryId?.let { categoriesMap[it] }
+
+                            MediaThumbnail(
+                                asset = asset,
+                                category = category,
+                                isSelected = isSelected,
+                                isSelectionMode = state.isSelectionMode,
+                                onClick = {
+                                    if (state.isSelectionMode) {
+                                        viewModel.toggleItemSelection(asset.id)
+                                    } else {
+                                        activeViewerIndex = indexedAsset.index
+                                        viewModel.openDetail(asset)
+                                    }
+                                },
+                                onLongClick = {
+                                    if (!state.isSelectionMode) {
+                                        viewModel.toggleSelectionMode()
+                                    }
                                     viewModel.toggleItemSelection(asset.id)
-                                } else {
-                                    activeViewerIndex = index
-                                    viewModel.openDetail(asset)
                                 }
-                            },
-                            onLongClick = {
-                                if (!state.isSelectionMode) {
-                                    viewModel.toggleSelectionMode()
-                                }
-                                viewModel.toggleItemSelection(asset.id)
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -435,5 +485,30 @@ fun PhotosScreen(
             onCreateCategory = { /* handled in categories screen */ },
             onDismiss = { showBatchCategoryPicker = false }
         )
+    }
+}
+
+private fun formatPhotoGroupDate(timestamp: Long?): String {
+    if (timestamp == null) return "日期未知"
+
+    val now = Calendar.getInstance()
+    val date = Calendar.getInstance().apply { timeInMillis = timestamp }
+    val todayStart = (now.clone() as Calendar).apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    val yesterdayStart = (todayStart.clone() as Calendar).apply {
+        add(Calendar.DAY_OF_YEAR, -1)
+    }
+
+    return when {
+        date.timeInMillis >= todayStart.timeInMillis -> "今天"
+        date.timeInMillis >= yesterdayStart.timeInMillis -> "昨天"
+        date.get(Calendar.YEAR) == now.get(Calendar.YEAR) ->
+            "${date.get(Calendar.MONTH) + 1}月${date.get(Calendar.DAY_OF_MONTH)}日"
+        else ->
+            "${date.get(Calendar.YEAR)}年${date.get(Calendar.MONTH) + 1}月${date.get(Calendar.DAY_OF_MONTH)}日"
     }
 }

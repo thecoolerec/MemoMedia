@@ -5,9 +5,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.LocalMediaApplication
 import com.example.core.enum.SessionStatus
-import com.example.core.model.CaptureSession
 import com.example.core.model.Category
 import com.example.core.model.MediaAsset
+import com.example.core.model.MediaSourceInfo
+import com.example.core.model.MediaSourceResolver
+import com.example.core.model.needsOrganization
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -15,14 +17,16 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-data class SessionWithMedia(
-    val session: CaptureSession,
+data class PendingSourceGroup(
+    val source: MediaSourceInfo,
     val mediaItems: List<MediaAsset>
-)
+) {
+    val latestAt: Long
+        get() = mediaItems.maxOfOrNull { it.addedAt } ?: 0L
+}
 
 data class InboxUiState(
-    val pendingSessions: List<SessionWithMedia> = emptyList(),
-    val orphanPendingMedia: List<MediaAsset> = emptyList(),
+    val sourceGroups: List<PendingSourceGroup> = emptyList(),
     val totalPendingCount: Int = 0,
     val categories: List<Category> = emptyList(),
     val isRefreshing: Boolean = false,
@@ -39,27 +43,25 @@ class InboxViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedAssetForDetail = MutableStateFlow<MediaAsset?>(null)
 
     val uiState: StateFlow<InboxUiState> = combine(
-        sessionRepository.observeActiveSessions(),
         mediaRepository.observePending(),
         categoryRepository.observeAll(),
         _isRefreshing,
         _selectedAssetForDetail
-    ) { sessions, pendingMedia, categories, isRefreshing, detailAsset ->
-        val sessionMediaMap = pendingMedia.filter { it.captureSessionId != null }
-            .groupBy { it.captureSessionId!! }
-
-        val sessionsWithMedia = sessions.mapNotNull { session ->
-            val items = sessionMediaMap[session.id] ?: emptyList()
-            if (items.isNotEmpty()) {
-                SessionWithMedia(session, items)
-            } else null
-        }
-
-        val orphanMedia = pendingMedia.filter { it.captureSessionId == null }
+    ) { pendingMedia, categories, isRefreshing, detailAsset ->
+        val groups = pendingMedia
+            .groupBy { MediaSourceResolver.resolve(it).key }
+            .values
+            .map { items ->
+                val sortedItems = items.sortedByDescending { it.addedAt }
+                PendingSourceGroup(
+                    source = MediaSourceResolver.resolve(sortedItems.first()),
+                    mediaItems = sortedItems
+                )
+            }
+            .sortedByDescending { it.latestAt }
 
         InboxUiState(
-            pendingSessions = sessionsWithMedia,
-            orphanPendingMedia = orphanMedia,
+            sourceGroups = groups,
             totalPendingCount = pendingMedia.size,
             categories = categories,
             isRefreshing = isRefreshing,
@@ -71,15 +73,31 @@ class InboxViewModel(application: Application) : AndroidViewModel(application) {
         InboxUiState()
     )
 
-    fun classifySession(sessionId: Long, category: Category) {
+    fun classifySourceGroup(group: PendingSourceGroup, category: Category) {
         viewModelScope.launch {
-            app.classifySessionUseCase(sessionId, category.id)
+            val relatedSessionIds = group.mediaItems.mapNotNull { it.captureSessionId }.distinct()
+            group.mediaItems.forEach { asset ->
+                app.classifyMediaUseCase(asset.id, category.id)
+            }
+            for (sessionId in relatedSessionIds) {
+                closeSessionIfFullyClassified(sessionId)
+            }
         }
     }
 
     fun classifySingleMedia(mediaId: Long, category: Category) {
         viewModelScope.launch {
+            val asset = mediaRepository.getById(mediaId)
             app.classifyMediaUseCase(mediaId, category.id)
+            asset?.captureSessionId?.let { closeSessionIfFullyClassified(it) }
+        }
+    }
+
+    private suspend fun closeSessionIfFullyClassified(sessionId: Long) {
+        val sessionItems = mediaRepository.getBySession(sessionId)
+        if (sessionItems.isNotEmpty() && sessionItems.none { it.needsOrganization }) {
+            sessionRepository.updateStatus(sessionId, SessionStatus.CLASSIFIED.name)
+            app.notificationManager.cancelSessionNotification(sessionId)
         }
     }
 
@@ -94,8 +112,11 @@ class InboxViewModel(application: Application) : AndroidViewModel(application) {
     fun refresh() {
         viewModelScope.launch {
             _isRefreshing.value = true
-            app.mediaReconciler.reconcile(forceFullScan = true)
-            _isRefreshing.value = false
+            try {
+                app.mediaReconciler.reconcile(forceFullScan = true)
+            } finally {
+                _isRefreshing.value = false
+            }
         }
     }
 }

@@ -46,6 +46,7 @@ sealed class Destination(
     )
 
     companion object {
-        val items = listOf(Photos, Inbox, Categories, Settings)
+        val items: List<Destination>
+            get() = listOf(Photos, Inbox, Categories, Settings)
     }
 }

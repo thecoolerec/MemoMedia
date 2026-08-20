@@ -55,6 +55,7 @@ import com.example.core.model.CaptureSession
 import com.example.core.model.Category
 import com.example.core.model.DeliveryResult
 import com.example.core.model.MediaAsset
+import com.example.core.model.MediaSourceResolver
 import com.example.ui.components.getCategoryColor
 import com.example.ui.components.getCategoryIcon
 import com.example.ui.theme.LocalMediaTheme
@@ -194,7 +195,7 @@ private fun OverlayCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${getSourceTitle(session.sourcePackage)} · ${session.mediaCount} 张",
+                        text = "${items.firstOrNull()?.let { MediaSourceResolver.resolve(it).title } ?: getSourceTitle(session.sourcePackage)} · ${session.mediaCount} 张",
                         color = MaterialTheme.colorScheme.onSurface,
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,

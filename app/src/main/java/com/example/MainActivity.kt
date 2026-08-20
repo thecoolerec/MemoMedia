@@ -15,11 +15,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.Button
@@ -45,6 +47,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.ui.categories.CategoriesScreen
 import com.example.ui.categories.CategoriesViewModel
@@ -152,18 +155,27 @@ fun MainAppScreen() {
     }
 
     val navController = rememberNavController()
+    val photosViewModel: PhotosViewModel = viewModel()
+    val photosState by photosViewModel.uiState.collectAsStateWithLifecycle()
+
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+    val isSelectionModeInPhotos = currentRoute == Destination.Photos.route && photosState.isSelectionMode
 
     // Use the same database definition as the Inbox so its badge can never
     // disagree with the content shown after navigation.
     val pendingCount by app.mediaRepository.observePendingCount().collectAsStateWithLifecycle(0)
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            AppBottomBar(
-                navController = navController,
-                pendingCount = pendingCount,
-                expiredCount = 0
-            )
+            if (!isSelectionModeInPhotos) {
+                AppBottomBar(
+                    navController = navController,
+                    pendingCount = pendingCount,
+                    expiredCount = 0
+                )
+            }
         },
         modifier = Modifier.fillMaxSize()
     ) { innerPadding ->
@@ -175,7 +187,9 @@ fun MainAppScreen() {
             if (accessState == MediaAccessState.Partial) {
                 Surface(
                     color = MaterialTheme.colorScheme.tertiaryContainer,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
                 ) {
                     Row(
                         modifier = Modifier
@@ -202,11 +216,10 @@ fun MainAppScreen() {
             NavHost(
                 navController = navController,
                 startDestination = Destination.Photos.route,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.fillMaxSize()
             ) {
                 composable(Destination.Photos.route) {
-                    val viewModel: PhotosViewModel = viewModel()
-                    PhotosScreen(viewModel = viewModel)
+                    PhotosScreen(viewModel = photosViewModel)
                 }
 
                 composable(Destination.Inbox.route) {
@@ -270,4 +283,3 @@ fun PermissionRequiredScreen(
         }
     }
 }
-

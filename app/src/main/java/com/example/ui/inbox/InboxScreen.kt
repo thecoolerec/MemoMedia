@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,27 +27,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CropSquare
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.PhoneAndroid
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -63,6 +59,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -70,6 +67,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.core.model.Category
 import com.example.core.model.MediaAsset
+import com.example.core.model.MediaSourceKind
+import com.example.ui.components.AppleToolbarButton
 import com.example.ui.components.CategoryPickerSheet
 import com.example.ui.components.EmptyStateCard
 import com.example.ui.components.MediaViewer
@@ -86,8 +85,7 @@ fun InboxScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    var selectedMoreSession by remember { mutableStateOf<SessionWithMedia?>(null) }
-    var showCategoryPickerForSession by remember { mutableStateOf<SessionWithMedia?>(null) }
+    var categoryPickerGroup by remember { mutableStateOf<PendingSourceGroup?>(null) }
     var activeViewerList by remember { mutableStateOf<List<MediaAsset>>(emptyList()) }
     var activeViewerIndex by remember { mutableIntStateOf(-1) }
 
@@ -95,22 +93,36 @@ fun InboxScreen(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            LargeTopAppBar(
+            TopAppBar(
                 title = {
                     Column {
                         Text(
                             text = "待整理",
-                            style = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.Bold
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold
                         )
-                        if (state.totalPendingCount > 0) {
-                            Text(
-                                text = "${state.totalPendingCount} 项新媒体等待归类",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                },
+                actions = {
+                    if (state.isRefreshing) {
+                        Box(
+                            modifier = Modifier.size(44.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
                             )
                         }
+                    } else {
+                        AppleToolbarButton(
+                            icon = Icons.Default.Refresh,
+                            contentDescription = "重新扫描媒体库",
+                            onClick = viewModel::refresh,
+                            testTag = "btn_refresh_inbox"
+                        )
                     }
+                    Spacer(modifier = Modifier.width(8.dp))
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
@@ -122,14 +134,15 @@ fun InboxScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(padding)
+                    .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.Center
             ) {
                 EmptyStateCard(
                     icon = Icons.Default.CheckCircle,
-                    title = "暂无待整理内容",
-                    description = "同步后，尚未分类的照片和视频会显示在这里。",
-                    actionLabel = "同步媒体库",
+                    title = "已经整理完了",
+                    description = "新出现且尚未归类的照片和视频会显示在这里。",
+                    actionLabel = if (state.isRefreshing) null else "重新扫描媒体库",
                     onActionClick = { viewModel.refresh() }
                 )
             }
@@ -138,93 +151,44 @@ fun InboxScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .testTag("inbox_session_list"),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .testTag("inbox_source_list"),
+                contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Pending Capture Sessions
                 items(
-                    items = state.pendingSessions,
-                    key = { "session_${it.session.id}" }
-                ) { sessionWithMedia ->
-                    var isVisible by remember { mutableStateOf(true) }
-
+                    items = state.sourceGroups,
+                    key = { "source_${it.source.key}" }
+                ) { group ->
+                    var visible by remember(group.source.key) { mutableStateOf(true) }
                     AnimatedVisibility(
-                        visible = isVisible,
-                        exit = fadeOut(tween(250)) + shrinkVertically(tween(250))
+                        visible = visible,
+                        exit = fadeOut(tween(220)) + shrinkVertically(tween(220))
                     ) {
-                        CaptureSessionCard(
-                            sessionWithMedia = sessionWithMedia,
+                        SourceGroupCard(
+                            group = group,
                             categories = state.categories,
-                            onClassifySession = { category ->
-                                isVisible = false
-                                viewModel.classifySession(sessionWithMedia.session.id, category)
-                                val count = sessionWithMedia.mediaItems.size
-                                val retentionInfo = if (category.retentionDays != null) " · 保留 ${category.retentionDays} 天" else ""
+                            onClassifyGroup = { category ->
+                                visible = false
+                                viewModel.classifySourceGroup(group, category)
+                                val retention = category.retentionDays?.let { " · 保留 $it 天" }.orEmpty()
                                 scope.launch {
-                                    snackbarHostState.showSnackbar("${count}项已归入「${category.name}」$retentionInfo")
+                                    snackbarHostState.showSnackbar(
+                                        "${group.mediaItems.size} 项已归入「${category.name}」$retention"
+                                    )
                                 }
                             },
-                            onOpenMore = {
-                                selectedMoreSession = sessionWithMedia
-                            },
-                            onOpenAllCategories = {
-                                showCategoryPickerForSession = sessionWithMedia
-                            },
-                            onItemClick = { asset, index ->
-                                activeViewerList = sessionWithMedia.mediaItems
+                            onOpenAllCategories = { categoryPickerGroup = group },
+                            onItemClick = { index ->
+                                activeViewerList = group.mediaItems
                                 activeViewerIndex = index
                             }
                         )
-                    }
-                }
-
-                // Orphan Pending Items (Individual photos not grouped in session)
-                if (state.orphanPendingMedia.isNotEmpty()) {
-                    item {
-                        Text(
-                            text = "单张未归类",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-                        )
-                    }
-
-                    items(
-                        items = state.orphanPendingMedia,
-                        key = { "orphan_${it.id}" }
-                    ) { asset ->
-                        var isVisible by remember { mutableStateOf(true) }
-
-                        AnimatedVisibility(
-                            visible = isVisible,
-                            exit = fadeOut(tween(250)) + shrinkVertically(tween(250))
-                        ) {
-                            SinglePendingMediaCard(
-                                asset = asset,
-                                categories = state.categories,
-                                onClassify = { category ->
-                                    isVisible = false
-                                    viewModel.classifySingleMedia(asset.id, category)
-                                    val retentionInfo = if (category.retentionDays != null) " · 保留 ${category.retentionDays} 天" else ""
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar("已归入「${category.name}」$retentionInfo")
-                                    }
-                                },
-                                onClick = {
-                                    activeViewerList = state.orphanPendingMedia
-                                    activeViewerIndex = state.orphanPendingMedia.indexOf(asset).coerceAtLeast(0)
-                                }
-                            )
-                        }
                     }
                 }
             }
         }
     }
 
-    // Media Viewer
     if (activeViewerIndex in activeViewerList.indices) {
         MediaViewer(
             items = activeViewerList,
@@ -234,9 +198,9 @@ fun InboxScreen(
             onDismiss = { activeViewerIndex = -1 },
             onChangeCategory = { asset, category ->
                 viewModel.classifySingleMedia(asset.id, category)
-                val retentionInfo = if (category.retentionDays != null) " · 保留 ${category.retentionDays} 天" else ""
+                val retention = category.retentionDays?.let { " · 保留 $it 天" }.orEmpty()
                 scope.launch {
-                    snackbarHostState.showSnackbar("已归入「${category.name}」$retentionInfo")
+                    snackbarHostState.showSnackbar("已归入「${category.name}」$retention")
                 }
             },
             onAddTag = { _, _ -> },
@@ -245,245 +209,175 @@ fun InboxScreen(
         )
     }
 
-    // Full Category Picker Sheet for Session
-    showCategoryPickerForSession?.let { sessionWithMedia ->
+    categoryPickerGroup?.let { group ->
         CategoryPickerSheet(
-            title = "归类 ${sessionWithMedia.mediaItems.size} 项媒体",
-            subtitle = "选择目标分类，自动应用对应的生命周期策略",
+            title = "归类 ${group.mediaItems.size} 项${group.source.title}媒体",
+            subtitle = "这一组来自 ${group.source.detail ?: group.source.title}",
             categories = state.categories,
             onSelectCategory = { category ->
-                viewModel.classifySession(sessionWithMedia.session.id, category)
-                showCategoryPickerForSession = null
-                val count = sessionWithMedia.mediaItems.size
-                val retentionInfo = if (category.retentionDays != null) " · 保留 ${category.retentionDays} 天" else ""
+                viewModel.classifySourceGroup(group, category)
+                categoryPickerGroup = null
+                val retention = category.retentionDays?.let { " · 保留 $it 天" }.orEmpty()
                 scope.launch {
-                    snackbarHostState.showSnackbar("${count}项已归入「${category.name}」$retentionInfo")
+                    snackbarHostState.showSnackbar(
+                        "${group.mediaItems.size} 项已归入「${category.name}」$retention"
+                    )
                 }
             },
             onCreateCategory = {},
-            onDismiss = { showCategoryPickerForSession = null }
+            onDismiss = { categoryPickerGroup = null }
         )
     }
 }
 
 @Composable
-private fun CaptureSessionCard(
-    sessionWithMedia: SessionWithMedia,
+private fun SourceGroupCard(
+    group: PendingSourceGroup,
     categories: List<Category>,
-    onClassifySession: (Category) -> Unit,
-    onOpenMore: () -> Unit,
+    onClassifyGroup: (Category) -> Unit,
     onOpenAllCategories: () -> Unit,
-    onItemClick: (MediaAsset, Int) -> Unit
+    onItemClick: (Int) -> Unit
 ) {
-    val session = sessionWithMedia.session
-    val items = sessionWithMedia.mediaItems
-    var showDropdown by remember { mutableStateOf(false) }
+    val source = group.source
+    val items = group.mediaItems
 
-    Card(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("capture_session_card_${session.id}"),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
+            .testTag("source_group_${source.key}"),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(14.dp)
         ) {
-            // Header Row: Source Icon + App Name + Time · N items > + More menu
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = getSourceIcon(session.sourcePackage),
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(10.dp))
-
-                    Column {
-                        Text(
-                            text = getSourceTitle(session.sourcePackage),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "${formatRelativeTime(session.startedAt)} · ${items.size} 项",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                Box {
-                    IconButton(
-                        onClick = { showDropdown = true },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MoreHoriz,
-                            contentDescription = "更多选项",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = showDropdown,
-                        onDismissRequest = { showDropdown = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("所有分类...") },
-                            onClick = {
-                                showDropdown = false
-                                onOpenAllCategories()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("查看首张详情") },
-                            onClick = {
-                                showDropdown = false
-                                if (items.isNotEmpty()) {
-                                    onItemClick(items[0], 0)
-                                }
-                            }
-                        )
-                    }
-                }
-            }
+            SourceGroupHeader(group)
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Thumbnail Row (Max 4 displayed, 4th has +N overlay if total > 4)
-            val displayItems = items.take(4)
-            val overflowCount = items.size - 4
+            ThumbnailStrip(
+                items = items,
+                onItemClick = onItemClick
+            )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                displayItems.forEachIndexed { index, asset ->
-                    val isLastAndOverflow = index == 3 && overflowCount > 0
+            Spacer(modifier = Modifier.height(12.dp))
 
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { onItemClick(asset, index) }
-                    ) {
-                        AsyncImage(
-                            model = Uri.parse(asset.contentUri),
-                            contentDescription = asset.displayName,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(80.dp)
-                        )
+            QuickCategoryRow(
+                categories = categories,
+                onClassify = onClassifyGroup,
+                onMore = onOpenAllCategories
+            )
+        }
+    }
+}
 
-                        if (isLastAndOverflow) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(80.dp)
-                                    .background(Color.Black.copy(alpha = 0.55f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "+$overflowCount",
-                                    color = Color.White,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-                }
+@Composable
+private fun SourceGroupHeader(group: PendingSourceGroup) {
+    val source = group.source
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = sourceIcon(source.kind),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = source.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            val detail = source.detail?.trim('/')
+            if (!detail.isNullOrBlank()) {
+                Text(
+                    text = detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
+        }
 
-            Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.width(8.dp))
 
-            // Quick Category Action Chips Row (Max 3 categories with retention text + "••• 更多")
-            val topCategories = categories.take(3)
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = "${group.mediaItems.size} 项",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = formatRelativeTime(group.latestAt),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+@Composable
+private fun ThumbnailStrip(
+    items: List<MediaAsset>,
+    onItemClick: (Int) -> Unit
+) {
+    val displayItems = items.take(4)
+    val overflowCount = items.size - displayItems.size
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        displayItems.forEachIndexed { index, asset ->
+            val showOverflow = index == displayItems.lastIndex && overflowCount > 0
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(78.dp)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { onItemClick(index) }
             ) {
-                topCategories.forEach { category ->
-                    Surface(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(20.dp))
-                            .clickable { onClassifySession(category) }
-                            .testTag("btn_session_${session.id}_classify_${category.id}"),
-                        color = getCategoryColor(category.name).copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(20.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = getCategoryIcon(category.icon),
-                                contentDescription = category.name,
-                                tint = getCategoryColor(category.name),
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            val label = if (category.retentionDays != null) {
-                                "${category.name} ${category.retentionDays}天"
-                            } else {
-                                category.name
-                            }
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = getCategoryColor(category.name),
-                                maxLines = 1
-                            )
-                        }
-                    }
-                }
+                AsyncImage(
+                    model = Uri.parse(asset.contentUri),
+                    contentDescription = asset.displayName,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
 
-                // "•••" More Categories Button
-                Surface(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .clickable { onOpenAllCategories() }
-                        .testTag("btn_session_${session.id}_more_categories"),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(20.dp)
-                ) {
+                if (showOverflow) {
                     Box(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.48f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.MoreHoriz,
-                            contentDescription = "更多分类",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
+                        Text(
+                            text = "+$overflowCount",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
@@ -493,98 +387,78 @@ private fun CaptureSessionCard(
 }
 
 @Composable
-private fun SinglePendingMediaCard(
-    asset: MediaAsset,
+private fun QuickCategoryRow(
     categories: List<Category>,
     onClassify: (Category) -> Unit,
-    onClick: () -> Unit
+    onMore: () -> Unit
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-            .testTag("single_pending_card_${asset.id}"),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        shape = RoundedCornerShape(16.dp)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AsyncImage(
-                model = Uri.parse(asset.contentUri),
-                contentDescription = asset.displayName,
-                contentScale = ContentScale.Crop,
+        categories.take(3).forEach { category ->
+            val categoryColor = getCategoryColor(category.name)
+            Surface(
                 modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(10.dp))
-            )
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = asset.displayName ?: "新拍摄媒体",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1
-                )
-                Text(
-                    text = "${asset.bucketName ?: "相册"} · ${asset.capturedAt?.let { formatRelativeTime(it) } ?: "刚刚"}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
+                    .weight(1f)
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onClassify(category) },
+                color = categoryColor.copy(alpha = 0.12f),
+                shape = RoundedCornerShape(12.dp)
+            ) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
                 ) {
-                    categories.take(3).forEach { category ->
-                        Surface(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable { onClassify(category) },
-                            color = getCategoryColor(category.name).copy(alpha = 0.15f),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(
-                                text = category.name,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = getCategoryColor(category.name)
-                            )
-                        }
-                    }
+                    Icon(
+                        imageVector = getCategoryIcon(category.icon),
+                        contentDescription = null,
+                        tint = categoryColor,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(
+                        text = category.name,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = categoryColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
+            }
+        }
+
+        Surface(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onMore),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = CircleShape
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Default.MoreHoriz,
+                    contentDescription = "更多分类",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
     }
 }
 
-private fun getSourceTitle(pkg: String?): String {
-    return when {
-        pkg == null -> "系统相机"
-        pkg.contains("camera", ignoreCase = true) -> "系统相机"
-        pkg.contains("tencent.mm", ignoreCase = true) -> "微信"
-        pkg.contains("tencent.mobileqq", ignoreCase = true) -> "QQ"
-        pkg.contains("screenshot", ignoreCase = true) -> "屏幕截图"
-        else -> "新媒体"
-    }
-}
-
-private fun getSourceIcon(pkg: String?): ImageVector {
-    return when {
-        pkg == null -> Icons.Default.CameraAlt
-        pkg.contains("camera", ignoreCase = true) -> Icons.Default.CameraAlt
-        pkg.contains("tencent.mm", ignoreCase = true) || pkg.contains("tencent.mobileqq", ignoreCase = true) -> Icons.AutoMirrored.Filled.Chat
-        pkg.contains("screenshot", ignoreCase = true) -> Icons.Default.CropSquare
-        else -> Icons.Default.Image
-    }
+private fun sourceIcon(kind: MediaSourceKind): ImageVector = when (kind) {
+    MediaSourceKind.CAMERA -> Icons.Default.CameraAlt
+    MediaSourceKind.WECHAT,
+    MediaSourceKind.QQ -> Icons.AutoMirrored.Filled.Chat
+    MediaSourceKind.SCREENSHOT -> Icons.Default.CropSquare
+    MediaSourceKind.DOWNLOADS -> Icons.Default.Download
+    MediaSourceKind.OTHER -> Icons.Default.Image
 }
